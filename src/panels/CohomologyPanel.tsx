@@ -57,22 +57,17 @@ function CoboundaryDisplay({ k }: { k: CohomologyDegree }) {
   const nerve = useNerve();
   const cochainValues = useStore((s) => s.cochainValues);
   const delta = applyCoboundary(cochainValues, nerve, k);
-  const isCocycle = delta.size === 0;
+  if (delta.size === 0) return null;
   return (
     <div className="coboundary-display">
       <div>
-        δc ={" "}
-        {isCocycle
-          ? <strong>0 — c is a cocycle ✓</strong>
-          : <span className="not-cocycle">non-zero — c is not a cocycle</span>}
+        <span className="not-cocycle">δc ≠ 0 — current cochain is not a cocycle</span>
       </div>
-      {!isCocycle && (
-        <ul>
-          {[...delta.entries()].map(([key, v]) => (
-            <li key={key}><code>{`{${key}}`}</code>: {v}</li>
-          ))}
-        </ul>
-      )}
+      <ul>
+        {[...delta.entries()].map(([key, v]) => (
+          <li key={key}><code>{`{${key}}`}</code>: {v}</li>
+        ))}
+      </ul>
     </div>
   );
 }
