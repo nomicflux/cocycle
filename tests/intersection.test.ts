@@ -3,7 +3,7 @@ import type { Disc } from "../src/state/types";
 import { pairIntersects, tripleIntersects, pointInDisc } from "../src/math/intersection";
 import { buildNerve } from "../src/math/nerve";
 
-const D = (cx: number, cy: number, r: number): Disc => ({ id: `${cx},${cy},${r}`, cx, cy, r });
+const D = (cx: number, cy: number, r: number): Disc => ({ id: `${cx},${cy},${r}`, cx, cy, r, color: "#000" });
 
 describe("pairIntersects", () => {
   it("returns true for overlapping discs", () => {

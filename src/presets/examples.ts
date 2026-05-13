@@ -1,13 +1,13 @@
-import type { Disc } from "../state/types";
+type PresetDisc = { cx: number; cy: number; r: number };
 
 export type Preset = {
   id: string;
   name: string;
   description: string;
-  discs: Array<Omit<Disc, "id">>;
+  discs: PresetDisc[];
 };
 
-function triangleHole(cx: number, cy: number, scale: number): Array<Omit<Disc, "id">> {
+function triangleHole(cx: number, cy: number, scale: number): PresetDisc[] {
   const r = 1.1 * scale;
   return [
     { cx: cx + 0, cy: cy + 0, r },

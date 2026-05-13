@@ -4,7 +4,7 @@ import { buildNerve } from "../src/math/nerve";
 import { cohomology } from "../src/math/cohomology";
 import { connectedComponents } from "../src/math/components";
 
-const D = (cx: number, cy: number, r: number): Disc => ({ id: `${cx},${cy},${r}`, cx, cy, r });
+const D = (cx: number, cy: number, r: number): Disc => ({ id: `${cx},${cy},${r}`, cx, cy, r, color: "#000" });
 
 describe("cohomology of S^1 (3 discs in the triangle-hole configuration)", () => {
   const r = 1.1;

@@ -11,6 +11,13 @@ let nextSnapshotNum = 1;
 const makeDiscId = (): string => `d${nextDiscNum++}`;
 const makeSnapshotId = (): string => `s${nextSnapshotNum++}`;
 
+const PASTELS = [
+  "#fecaca", "#fed7aa", "#fde68a", "#bbf7d0",
+  "#a5f3fc", "#bfdbfe", "#c7d2fe", "#ddd6fe",
+  "#f5d0fe", "#fbcfe8", "#fcd34d", "#86efac",
+];
+const randomPastel = (): string => PASTELS[Math.floor(Math.random() * PASTELS.length)];
+
 type State = {
   discs: Disc[];
   selectedSimplex: Simplex | null;
@@ -29,7 +36,9 @@ type Actions = {
   resizeDisc: (id: string, r: number) => void;
   removeDisc: (id: string) => void;
   clearDiscs: () => void;
-  loadDiscs: (discs: Array<Omit<Disc, "id">>) => void;
+  loadDiscs: (
+    discs: Array<{ cx: number; cy: number; r: number; color?: string }>,
+  ) => void;
   selectSimplex: (s: Simplex | null) => void;
   setCohomologyDegree: (d: CohomologyDegree) => void;
   setCochainValue: (s: Simplex, v: number) => void;
@@ -55,7 +64,9 @@ export const useStore = create<State & Actions>((set) => ({
   showArrows: true,
 
   addDisc: (cx, cy, r) =>
-    set((s) => ({ discs: [...s.discs, { id: makeDiscId(), cx, cy, r }] })),
+    set((s) => ({
+      discs: [...s.discs, { id: makeDiscId(), cx, cy, r, color: randomPastel() }],
+    })),
   moveDisc: (id, cx, cy) =>
     set((s) => ({ discs: s.discs.map((d) => (d.id === id ? { ...d, cx, cy } : d)) })),
   resizeDisc: (id, r) =>
@@ -70,7 +81,11 @@ export const useStore = create<State & Actions>((set) => ({
     set({ discs: [], selectedSimplex: null, cochainValues: new Map() }),
   loadDiscs: (discs) =>
     set({
-      discs: discs.map((d) => ({ ...d, id: makeDiscId() })),
+      discs: discs.map((d) => ({
+        ...d,
+        id: makeDiscId(),
+        color: d.color ?? randomPastel(),
+      })),
       selectedSimplex: null,
       cochainValues: new Map(),
       basisCursor: 0,

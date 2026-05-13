@@ -1,4 +1,4 @@
-export type Disc = { id: string; cx: number; cy: number; r: number };
+export type Disc = { id: string; cx: number; cy: number; r: number; color: string };
 
 export type Simplex = number[];
 

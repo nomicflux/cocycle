@@ -1,16 +1,20 @@
 import { useRef, useState } from "react";
 import type { Disc } from "../state/types";
 import { useStore } from "../state/store";
-import { useComponents } from "../state/derived";
 import { intersectionPolygon } from "../util/intersectionRegion";
 
 const SVG_SIZE = 600;
 const MATH_MIN = -6;
 const MATH_MAX = 6;
-const COLORS = [
-  "#ef4444", "#3b82f6", "#10b981", "#f59e0b",
-  "#a855f7", "#ec4899", "#06b6d4", "#84cc16",
-];
+
+function darken(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const f = 0.55;
+  const to = (v: number) => Math.max(0, Math.round(v * f)).toString(16).padStart(2, "0");
+  return `#${to(r)}${to(g)}${to(b)}`;
+}
 
 const toSvgX = (x: number) => ((x - MATH_MIN) / (MATH_MAX - MATH_MIN)) * SVG_SIZE;
 const toSvgY = (y: number) => ((MATH_MAX - y) / (MATH_MAX - MATH_MIN)) * SVG_SIZE;
@@ -36,7 +40,6 @@ export default function DrawingPanel() {
   const selectSimplex = useStore((s) => s.selectSimplex);
   const compareWith = useStore((s) => s.compareWithSnapshot);
   const snapshots = useStore((s) => s.snapshots);
-  const components = useComponents();
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
 
@@ -89,12 +92,12 @@ export default function DrawingPanel() {
       >
         <rect width={SVG_SIZE} height={SVG_SIZE} fill="#fafafa" />
         {discs.map((d, i) => {
-          const color = COLORS[components[i] % COLORS.length];
+          const stroke = darken(d.color);
           return (
             <g key={d.id}>
               <circle
                 cx={toSvgX(d.cx)} cy={toSvgY(d.cy)} r={toSvgScale(d.r)}
-                fill={color} fillOpacity={0.18} stroke={color} strokeWidth={1.5}
+                fill={d.color} fillOpacity={0.55} stroke={stroke} strokeWidth={1.5}
                 onPointerDown={(e) => onDiscPointerDown(e, d, i)}
                 style={{ cursor: "grab" }}
               />
@@ -107,7 +110,7 @@ export default function DrawingPanel() {
               </text>
               <circle
                 cx={toSvgX(d.cx + d.r)} cy={toSvgY(d.cy)} r={5}
-                fill={color} stroke="#000" strokeWidth={1}
+                fill={d.color} stroke={stroke} strokeWidth={1}
                 onPointerDown={(e) => onHandlePointerDown(e, d)}
                 style={{ cursor: "ew-resize" }}
               />
