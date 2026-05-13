@@ -9,7 +9,8 @@ import { simplexKey } from "./types";
 
 export function useNerve(): Nerve {
   const discs = useStore((s) => s.discs);
-  return useMemo(() => buildNerve(discs), [discs]);
+  const torusMode = useStore((s) => s.torusMode);
+  return useMemo(() => buildNerve(discs, 3, { torus: torusMode }), [discs, torusMode]);
 }
 
 export function useComponents(): number[] {

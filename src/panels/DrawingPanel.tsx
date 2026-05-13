@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import type { Disc } from "../state/types";
 import { useStore } from "../state/store";
 import { intersectionPolygon } from "../util/intersectionRegion";
+import { TORUS_PERIOD } from "../math/intersection";
 
 const SVG_SIZE = 600;
 const MATH_MIN = -6;
@@ -25,10 +26,28 @@ const toSvgScale = (d: number) => (d / (MATH_MAX - MATH_MIN)) * SVG_SIZE;
 type DragState = { kind: "move" | "resize"; id: string; offsetX?: number; offsetY?: number };
 
 function pointFromEvent(e: React.PointerEvent, svg: SVGSVGElement): [number, number] {
-  const rect = svg.getBoundingClientRect();
-  const sx = ((e.clientX - rect.left) / rect.width) * SVG_SIZE;
-  const sy = ((e.clientY - rect.top) / rect.height) * SVG_SIZE;
-  return [toMathX(sx), toMathY(sy)];
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX;
+  pt.y = e.clientY;
+  const ctm = svg.getScreenCTM();
+  if (!ctm) return [0, 0];
+  const local = pt.matrixTransform(ctm.inverse());
+  return [toMathX(local.x), toMathY(local.y)];
+}
+
+function wrappedGhosts(d: Disc): Array<{ cx: number; cy: number }> {
+  const out: Array<{ cx: number; cy: number }> = [];
+  for (const sx of [-TORUS_PERIOD, 0, TORUS_PERIOD]) {
+    for (const sy of [-TORUS_PERIOD, 0, TORUS_PERIOD]) {
+      if (sx === 0 && sy === 0) continue;
+      const cx = d.cx + sx;
+      const cy = d.cy + sy;
+      if (cx + d.r < MATH_MIN || cx - d.r > MATH_MAX) continue;
+      if (cy + d.r < MATH_MIN || cy - d.r > MATH_MAX) continue;
+      out.push({ cx, cy });
+    }
+  }
+  return out;
 }
 
 export default function DrawingPanel() {
@@ -40,6 +59,8 @@ export default function DrawingPanel() {
   const selectSimplex = useStore((s) => s.selectSimplex);
   const compareWith = useStore((s) => s.compareWithSnapshot);
   const snapshots = useStore((s) => s.snapshots);
+  const torusMode = useStore((s) => s.torusMode);
+  const setTorusMode = useStore((s) => s.setTorusMode);
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
 
@@ -82,6 +103,16 @@ export default function DrawingPanel() {
     <div className="panel drawing-panel">
       <div className="panel-header">
         <h2>Open cover (drag = move, drag rim = resize, shift+click = delete)</h2>
+        <div className="panel-toggles">
+          <label>
+            <input
+              type="checkbox"
+              checked={torusMode}
+              onChange={(e) => setTorusMode(e.target.checked)}
+            />
+            Torus mode
+          </label>
+        </div>
       </div>
       <svg
         ref={svgRef}
@@ -91,10 +122,28 @@ export default function DrawingPanel() {
         preserveAspectRatio="xMidYMid meet"
       >
         <rect width={SVG_SIZE} height={SVG_SIZE} fill="#fafafa" />
+        {torusMode && (
+          <rect
+            x={0} y={0} width={SVG_SIZE} height={SVG_SIZE}
+            fill="none" stroke="#64748b" strokeWidth={2}
+            strokeDasharray="8 6" pointerEvents="none"
+          />
+        )}
         {discs.map((d, i) => {
           const stroke = darken(d.color);
+          const ghosts = torusMode ? wrappedGhosts(d) : [];
           return (
             <g key={d.id}>
+              {ghosts.map((g, gi) => (
+                <circle
+                  key={`g-${gi}`}
+                  cx={toSvgX(g.cx)} cy={toSvgY(g.cy)} r={toSvgScale(d.r)}
+                  fill={d.color} fillOpacity={0.35} stroke={stroke} strokeWidth={1}
+                  strokeDasharray="4 3"
+                  onPointerDown={(e) => onDiscPointerDown(e, d, i)}
+                  style={{ cursor: "grab" }}
+                />
+              ))}
               <circle
                 cx={toSvgX(d.cx)} cy={toSvgY(d.cy)} r={toSvgScale(d.r)}
                 fill={d.color} fillOpacity={0.55} stroke={stroke} strokeWidth={1.5}

@@ -5,6 +5,7 @@ export type Preset = {
   name: string;
   description: string;
   discs: PresetDisc[];
+  torusMode?: boolean;
 };
 
 function triangleHole(cx: number, cy: number, scale: number): PresetDisc[] {
@@ -53,5 +54,18 @@ export const presets: Preset[] = [
     name: "Two circles (S¹ ⊔ S¹)",
     description: "Two triangle-hole configurations. H⁰ = ℤ², H¹ = ℤ².",
     discs: [...triangleHole(-3.5, -0.9, 0.9), ...triangleHole(1, -0.9, 0.9)],
+  },
+  {
+    id: "torus-loop",
+    name: "Torus loop (wraparound S¹)",
+    description:
+      "Four discs evenly spaced; needs torus mode. Wraparound creates a 1-cycle. H⁰ = ℤ, H¹ = ℤ (vs. H¹ = 0 in planar mode).",
+    discs: [
+      { cx: -4.5, cy: 0, r: 1.6 },
+      { cx: -1.5, cy: 0, r: 1.6 },
+      { cx: 1.5, cy: 0, r: 1.6 },
+      { cx: 4.5, cy: 0, r: 1.6 },
+    ],
+    torusMode: true,
   },
 ];

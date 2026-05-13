@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { useStore } from "../state/store";
 import { useNerve, useCohomology, applyCoboundary } from "../state/derived";
+import type { Cochain, SimplexKey } from "../state/types";
 import { simplexKey } from "../state/types";
 import type { CohomologyDegree } from "../state/store";
+import { cup } from "../math/cup";
 
 function formatGroup(rank: number, torsion: number[]): string {
   const parts: string[] = [];
@@ -72,6 +75,123 @@ function CoboundaryDisplay({ k }: { k: CohomologyDegree }) {
   );
 }
 
+function CupResult({
+  result,
+  delta,
+}: {
+  result: Cochain;
+  delta: Map<SimplexKey, number>;
+}) {
+  const entries = [...result.values.entries()];
+  return (
+    <div className="cup-result">
+      <div className="hint">
+        result in H<sup>{result.degree}</sup>:
+      </div>
+      {entries.length === 0 ? (
+        <div className="hint">all zeros</div>
+      ) : (
+        <ul>
+          {entries.map(([key, v]) => (
+            <li key={key}>
+              <code>{`{${key}}`}</code>: {v}
+            </li>
+          ))}
+        </ul>
+      )}
+      <div className={delta.size === 0 ? "cocycle-ok" : "not-cocycle"}>
+        {delta.size === 0 ? "δ(result) = 0 ✓" : "δ(result) ≠ 0 — not a cocycle"}
+      </div>
+    </div>
+  );
+}
+
+function CupProductSection() {
+  const nerve = useNerve();
+  const q = useStore((s) => s.cohomologyDegree);
+  const currentValues = useStore((s) => s.cochainValues);
+  const [pickedDegree, setPickedDegree] = useState<CohomologyDegree>(0);
+  const [pickedIndex, setPickedIndex] = useState(0);
+  const [basisOnLeft, setBasisOnLeft] = useState(true);
+
+  const basisH = useCohomology(pickedDegree);
+  const generators = basisH.cocycleBasis.filter((c) => !c.isCoboundary);
+  const idx = Math.min(pickedIndex, Math.max(0, generators.length - 1));
+  const basis = generators[idx];
+  const totalDeg = pickedDegree + q;
+  const tooHigh = totalDeg > 2;
+
+  let result: Cochain | null = null;
+  let delta: Map<SimplexKey, number> = new Map();
+  if (basis && !tooHigh) {
+    const current: Cochain = { degree: q, values: currentValues };
+    result = basisOnLeft
+      ? cup(basis.cochain, current, nerve)
+      : cup(current, basis.cochain, nerve);
+    delta = applyCoboundary(result.values, nerve, result.degree);
+  }
+
+  return (
+    <div className="cup-section">
+      <h3>Cup product</h3>
+      <div className="cup-controls">
+        <label>
+          basis H<sup>p</sup>:
+          <select
+            value={pickedDegree}
+            onChange={(e) => {
+              setPickedDegree(Number(e.target.value) as CohomologyDegree);
+              setPickedIndex(0);
+            }}
+          >
+            <option value={0}>H⁰</option>
+            <option value={1}>H¹</option>
+            <option value={2}>H²</option>
+          </select>
+        </label>
+        {generators.length > 0 && (
+          <label>
+            gen:
+            <select
+              value={idx}
+              onChange={(e) => setPickedIndex(Number(e.target.value))}
+            >
+              {generators.map((_, i) => (
+                <option key={i} value={i}>g{i + 1}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <label>
+          <input
+            type="radio"
+            checked={basisOnLeft}
+            onChange={() => setBasisOnLeft(true)}
+          />
+          basis ∪ current
+        </label>
+        <label>
+          <input
+            type="radio"
+            checked={!basisOnLeft}
+            onChange={() => setBasisOnLeft(false)}
+          />
+          current ∪ basis
+        </label>
+      </div>
+      {generators.length === 0 ? (
+        <div className="hint">no free generators in H<sup>{pickedDegree}</sup></div>
+      ) : tooHigh ? (
+        <div className="hint">
+          p + q = {totalDeg} &gt; 2 — pick a basis degree p ≤ {2 - q}
+        </div>
+      ) : result ? (
+        <CupResult result={result} delta={delta} />
+      ) : null}
+    </div>
+  );
+}
+
 export default function CohomologyPanel() {
   const k = useStore((s) => s.cohomologyDegree);
   const setK = useStore((s) => s.setCohomologyDegree);
@@ -110,6 +230,7 @@ export default function CohomologyPanel() {
         </div>
         <CochainEditor k={k} />
         <CoboundaryDisplay k={k} />
+        <CupProductSection />
       </div>
     </div>
   );

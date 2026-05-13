@@ -58,3 +58,58 @@ export function tripleIntersects(a: Disc, b: Disc, c: Disc): boolean {
   if (pairPointInThird(b, c, a)) return true;
   return false;
 }
+
+export const TORUS_PERIOD = 12;
+const TORUS_SHIFTS = [-TORUS_PERIOD, 0, TORUS_PERIOD] as const;
+
+function translateDisc(d: Disc, dx: number, dy: number): Disc {
+  return { ...d, cx: d.cx + dx, cy: d.cy + dy };
+}
+
+function discTranslates(d: Disc): Disc[] {
+  const out: Disc[] = [];
+  for (const dx of TORUS_SHIFTS) {
+    for (const dy of TORUS_SHIFTS) {
+      out.push(translateDisc(d, dx, dy));
+    }
+  }
+  return out;
+}
+
+export function pairIntersectsTorus(a: Disc, b: Disc): boolean {
+  return discTranslates(b).some((bt) => pairIntersects(a, bt));
+}
+
+export function tripleIntersectsTorus(a: Disc, b: Disc, c: Disc): boolean {
+  const bs = discTranslates(b);
+  const cs = discTranslates(c);
+  for (const bt of bs) {
+    for (const ct of cs) {
+      if (tripleIntersects(a, bt, ct)) return true;
+    }
+  }
+  return false;
+}
+
+function planarQuadNonEmpty(a: Disc, b: Disc, c: Disc, d: Disc): boolean {
+  return (
+    tripleIntersects(a, b, c) &&
+    tripleIntersects(a, b, d) &&
+    tripleIntersects(a, c, d) &&
+    tripleIntersects(b, c, d)
+  );
+}
+
+export function quadIntersectsTorus(a: Disc, b: Disc, c: Disc, d: Disc): boolean {
+  const bs = discTranslates(b);
+  const cs = discTranslates(c);
+  const ds = discTranslates(d);
+  for (const bt of bs) {
+    for (const ct of cs) {
+      for (const dt of ds) {
+        if (planarQuadNonEmpty(a, bt, ct, dt)) return true;
+      }
+    }
+  }
+  return false;
+}

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import type { Disc, Simplex, SimplexKey } from "./types";
 import { simplexKey } from "./types";
+import { TORUS_PERIOD } from "../math/intersection";
 
 export type Snapshot = { id: string; name: string; discs: Disc[] };
 
@@ -18,6 +19,14 @@ const PASTELS = [
 ];
 const randomPastel = (): string => PASTELS[Math.floor(Math.random() * PASTELS.length)];
 
+const TORUS_MAX_R = TORUS_PERIOD / 2;
+const clampR = (r: number, torus: boolean): number =>
+  torus ? Math.min(r, TORUS_MAX_R) : r;
+const wrapMod = (x: number, period: number): number => {
+  const half = period / 2;
+  return ((x + half) % period + period) % period - half;
+};
+
 type State = {
   discs: Disc[];
   selectedSimplex: Simplex | null;
@@ -28,6 +37,7 @@ type State = {
   basisCursor: number;
   showLabels: boolean;
   showArrows: boolean;
+  torusMode: boolean;
 };
 
 type Actions = {
@@ -38,6 +48,7 @@ type Actions = {
   clearDiscs: () => void;
   loadDiscs: (
     discs: Array<{ cx: number; cy: number; r: number; color?: string }>,
+    torusMode?: boolean,
   ) => void;
   selectSimplex: (s: Simplex | null) => void;
   setCohomologyDegree: (d: CohomologyDegree) => void;
@@ -50,6 +61,7 @@ type Actions = {
   setBasisCursor: (i: number) => void;
   setShowLabels: (v: boolean) => void;
   setShowArrows: (v: boolean) => void;
+  setTorusMode: (v: boolean) => void;
 };
 
 export const useStore = create<State & Actions>((set) => ({
@@ -62,15 +74,33 @@ export const useStore = create<State & Actions>((set) => ({
   basisCursor: 0,
   showLabels: true,
   showArrows: true,
+  torusMode: false,
 
   addDisc: (cx, cy, r) =>
     set((s) => ({
-      discs: [...s.discs, { id: makeDiscId(), cx, cy, r, color: randomPastel() }],
+      discs: [
+        ...s.discs,
+        { id: makeDiscId(), cx, cy, r: clampR(r, s.torusMode), color: randomPastel() },
+      ],
     })),
   moveDisc: (id, cx, cy) =>
-    set((s) => ({ discs: s.discs.map((d) => (d.id === id ? { ...d, cx, cy } : d)) })),
+    set((s) => ({
+      discs: s.discs.map((d) =>
+        d.id === id
+          ? {
+              ...d,
+              cx: s.torusMode ? wrapMod(cx, TORUS_PERIOD) : cx,
+              cy: s.torusMode ? wrapMod(cy, TORUS_PERIOD) : cy,
+            }
+          : d,
+      ),
+    })),
   resizeDisc: (id, r) =>
-    set((s) => ({ discs: s.discs.map((d) => (d.id === id ? { ...d, r } : d)) })),
+    set((s) => ({
+      discs: s.discs.map((d) =>
+        d.id === id ? { ...d, r: clampR(r, s.torusMode) } : d,
+      ),
+    })),
   removeDisc: (id) =>
     set((s) => ({
       discs: s.discs.filter((d) => d.id !== id),
@@ -79,16 +109,21 @@ export const useStore = create<State & Actions>((set) => ({
     })),
   clearDiscs: () =>
     set({ discs: [], selectedSimplex: null, cochainValues: new Map() }),
-  loadDiscs: (discs) =>
-    set({
-      discs: discs.map((d) => ({
-        ...d,
-        id: makeDiscId(),
-        color: d.color ?? randomPastel(),
-      })),
-      selectedSimplex: null,
-      cochainValues: new Map(),
-      basisCursor: 0,
+  loadDiscs: (discs, torusMode) =>
+    set((s) => {
+      const t = torusMode ?? s.torusMode;
+      return {
+        discs: discs.map((d) => ({
+          ...d,
+          id: makeDiscId(),
+          r: clampR(d.r, t),
+          color: d.color ?? randomPastel(),
+        })),
+        torusMode: t,
+        selectedSimplex: null,
+        cochainValues: new Map(),
+        basisCursor: 0,
+      };
     }),
 
   selectSimplex: (s) => set({ selectedSimplex: s }),
@@ -122,4 +157,12 @@ export const useStore = create<State & Actions>((set) => ({
   setBasisCursor: (i) => set({ basisCursor: i }),
   setShowLabels: (v) => set({ showLabels: v }),
   setShowArrows: (v) => set({ showArrows: v }),
+  setTorusMode: (v) =>
+    set((s) => ({
+      torusMode: v,
+      selectedSimplex: null,
+      cochainValues: new Map(),
+      basisCursor: 0,
+      discs: v ? s.discs.map((d) => ({ ...d, r: clampR(d.r, true) })) : s.discs,
+    })),
 }));

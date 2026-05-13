@@ -150,3 +150,38 @@ body {
   color: #94a3b8; font-style: italic; font-size: 11px;
   font-family: ui-monospace, monospace;
 }
+
+.cup-section {
+  margin: 10px 0 4px; padding: 8px 10px;
+  background: #ede9fe; border-radius: 4px; border-left: 3px solid #8b5cf6;
+  font-size: 12px;
+}
+.cup-section h3 {
+  margin: 0 0 6px 0; font-size: 12px; font-weight: 600; color: #5b21b6;
+}
+.cup-controls {
+  display: flex; flex-wrap: wrap; gap: 6px 12px; align-items: center;
+  margin-bottom: 6px;
+}
+.cup-controls label {
+  display: inline-flex; align-items: center; gap: 4px; cursor: pointer;
+}
+.cup-controls select {
+  padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 3px;
+  background: #fff; font-size: 12px; margin-left: 4px;
+}
+.cup-controls input[type="radio"] { margin: 0; cursor: pointer; }
+
+.cup-result {
+  margin-top: 4px; padding: 5px 8px;
+  background: #fff; border-radius: 3px; border: 1px solid #ddd6fe;
+}
+.cup-result ul { margin: 2px 0; padding-left: 18px; }
+.cup-result li { line-height: 1.5; }
+.cup-result code { font-family: ui-monospace, monospace; }
+.cup-result .cocycle-ok {
+  color: #059669; font-weight: 600; margin-top: 4px;
+}
+.cup-result .not-cocycle {
+  color: #b45309; font-weight: 600; margin-top: 4px;
+}
