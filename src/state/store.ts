@@ -19,6 +19,8 @@ type State = {
   snapshots: Snapshot[];
   compareWithSnapshot: string | null;
   basisCursor: number;
+  showLabels: boolean;
+  showArrows: boolean;
 };
 
 type Actions = {
@@ -37,6 +39,8 @@ type Actions = {
   removeSnapshot: (id: string) => void;
   setCompareWith: (id: string | null) => void;
   setBasisCursor: (i: number) => void;
+  setShowLabels: (v: boolean) => void;
+  setShowArrows: (v: boolean) => void;
 };
 
 export const useStore = create<State & Actions>((set) => ({
@@ -47,6 +51,8 @@ export const useStore = create<State & Actions>((set) => ({
   snapshots: [],
   compareWithSnapshot: null,
   basisCursor: 0,
+  showLabels: true,
+  showArrows: true,
 
   addDisc: (cx, cy, r) =>
     set((s) => ({ discs: [...s.discs, { id: makeDiscId(), cx, cy, r }] })),
@@ -99,4 +105,6 @@ export const useStore = create<State & Actions>((set) => ({
     })),
   setCompareWith: (id) => set({ compareWithSnapshot: id }),
   setBasisCursor: (i) => set({ basisCursor: i }),
+  setShowLabels: (v) => set({ showLabels: v }),
+  setShowArrows: (v) => set({ showArrows: v }),
 }));
