@@ -1,0 +1,144 @@
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background: #f4f4f5;
+  color: #111;
+}
+
+.app { display: flex; flex-direction: column; height: 100vh; }
+
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px; background: #1e293b; color: #f1f5f9;
+}
+.topbar h1 { margin: 0; font-size: 18px; }
+.topbar .subtitle { font-size: 12px; opacity: 0.7; flex: 1; }
+.topbar button, .topbar select {
+  padding: 4px 10px; border-radius: 4px; border: 1px solid #475569;
+  background: #334155; color: #f1f5f9; cursor: pointer; font-size: 13px;
+}
+.topbar button:hover, .topbar select:hover { background: #475569; }
+
+.grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 8px;
+  padding: 8px;
+  overflow: hidden;
+}
+
+.panel {
+  background: #fff; border: 1px solid #e4e4e7; border-radius: 6px;
+  display: flex; flex-direction: column; overflow: hidden;
+}
+.panel-header {
+  padding: 6px 12px; border-bottom: 1px solid #e4e4e7;
+  display: flex; justify-content: space-between; align-items: center;
+}
+.panel-header h2 { margin: 0; font-size: 13px; font-weight: 600; color: #334155; }
+.panel-body { padding: 8px 12px; overflow: auto; flex: 1; }
+
+.panel svg { display: block; width: 100%; height: 100%; }
+.drawing-panel { min-height: 0; }
+.drawing-panel svg { min-height: 0; }
+
+.dim-section { margin-bottom: 10px; }
+.dim-section h3 {
+  margin: 0 0 4px 0; font-size: 12px; font-weight: 600; color: #475569;
+}
+.dim-section h3 small { font-weight: 400; opacity: 0.6; }
+.chip-grid { display: flex; flex-wrap: wrap; gap: 4px; }
+
+.simplex-chip {
+  padding: 2px 8px; border-radius: 4px; border: 1px solid #cbd5e1;
+  background: #f8fafc; cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px;
+}
+.simplex-chip:hover { background: #f1f5f9; }
+.simplex-chip.selected {
+  background: #facc15; border-color: #a16207; color: #422006;
+}
+
+.boundary-display {
+  margin-top: 12px; padding: 8px 10px; background: #f8fafc;
+  border-radius: 4px; font-size: 12px;
+}
+.boundary-display > div { margin: 3px 0; line-height: 1.6; }
+.inline-chip {
+  padding: 1px 5px; margin: 0 1px; border: 1px solid #cbd5e1;
+  background: #fff; cursor: pointer;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 11px; border-radius: 3px;
+}
+.inline-chip:hover { background: #f1f5f9; }
+
+.tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+.tabs button {
+  padding: 4px 12px; border: 1px solid #cbd5e1; background: #f8fafc;
+  cursor: pointer; font-size: 13px; border-radius: 4px;
+}
+.tabs button.active {
+  background: #facc15; border-color: #a16207; font-weight: 600;
+}
+
+.group {
+  font-size: 15px; margin: 8px 0; padding: 8px 10px;
+  background: #ecfeff; border-radius: 4px; border-left: 3px solid #06b6d4;
+}
+
+.basis-controls {
+  display: flex; gap: 6px; align-items: center; margin: 8px 0;
+  font-size: 12px;
+}
+.basis-controls button {
+  padding: 2px 8px; cursor: pointer; border-radius: 3px;
+  border: 1px solid #cbd5e1; background: #fff;
+}
+.basis-controls button:disabled { opacity: 0.4; cursor: default; }
+
+.cochain-editor {
+  font-size: 12px; max-height: 200px; overflow: auto;
+  border: 1px solid #e4e4e7; border-radius: 4px; padding: 4px 8px;
+}
+.cochain-row {
+  display: flex; justify-content: space-between; align-items: center;
+  margin: 2px 0; gap: 8px;
+}
+.cochain-row input {
+  width: 70px; font-family: ui-monospace, monospace;
+  padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 3px;
+}
+.cochain-row code { font-family: ui-monospace, monospace; }
+
+.coboundary-display {
+  margin: 8px 0; font-size: 12px; padding: 6px 10px;
+  background: #fef3c7; border-radius: 4px; border-left: 3px solid #f59e0b;
+}
+.coboundary-display ul { margin: 4px 0; padding-left: 18px; }
+.coboundary-display .not-cocycle { color: #b45309; font-weight: 600; }
+
+.snapshot-bar {
+  padding: 6px 12px; background: #f1f5f9; border-top: 1px solid #cbd5e1;
+  display: flex; gap: 6px; align-items: center; overflow-x: auto;
+  font-size: 12px; flex-wrap: wrap;
+}
+.snapshot-bar button {
+  padding: 3px 8px; cursor: pointer; font-size: 12px;
+  border: 1px solid #cbd5e1; background: #fff; border-radius: 3px;
+}
+.snapshot-hint { color: #64748b; font-size: 11px; }
+.snapshot-chip {
+  display: inline-flex; align-items: center; gap: 2px;
+  border: 1px solid #cbd5e1; border-radius: 4px; background: #fff;
+  padding: 0;
+}
+.snapshot-chip button { border: none; padding: 3px 6px; background: transparent; }
+.snapshot-chip.comparing { background: #fef9c3; border-color: #ca8a04; }
+
+.hint {
+  color: #94a3b8; font-style: italic; font-size: 11px;
+  font-family: ui-monospace, monospace;
+}
