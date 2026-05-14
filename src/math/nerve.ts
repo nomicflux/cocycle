@@ -1,11 +1,11 @@
-import type { Disc, Nerve, Simplex } from "../state/types";
+import type { Disc, Nerve, Simplex, Space } from "../state/types";
 import { simplexKey } from "../state/types";
 import {
   pairIntersects,
   tripleIntersects,
-  pairIntersectsTorus,
-  tripleIntersectsTorus,
-  quadIntersectsTorus,
+  pairIntersectsOn,
+  tripleIntersectsOn,
+  quadIntersectsOn,
 } from "./intersection";
 
 type PairFn = (a: Disc, b: Disc) => boolean;
@@ -69,7 +69,11 @@ function enumerateTetrahedraPlanar(triangleSet: Set<string>, n: number): Simplex
   return tetra;
 }
 
-function enumerateTetrahedraTorus(discs: Disc[], triangleSet: Set<string>): Simplex[] {
+function enumerateTetrahedraGeneric(
+  discs: Disc[],
+  triangleSet: Set<string>,
+  space: Space,
+): Simplex[] {
   const tetra: Simplex[] = [];
   const n = discs.length;
   for (let i = 0; i < n; i++) {
@@ -77,7 +81,7 @@ function enumerateTetrahedraTorus(discs: Disc[], triangleSet: Set<string>): Simp
       for (let k = j + 1; k < n; k++) {
         for (let l = k + 1; l < n; l++) {
           if (!allTriangleFaces(triangleSet, i, j, k, l)) continue;
-          if (quadIntersectsTorus(discs[i], discs[j], discs[k], discs[l])) {
+          if (quadIntersectsOn(space, discs[i], discs[j], discs[k], discs[l])) {
             tetra.push([i, j, k, l]);
           }
         }
@@ -90,11 +94,15 @@ function enumerateTetrahedraTorus(discs: Disc[], triangleSet: Set<string>): Simp
 export function buildNerve(
   discs: Disc[],
   maxDim: number = 3,
-  opts?: { torus?: boolean },
+  opts?: { space?: Space },
 ): Nerve {
-  const torus = opts?.torus ?? false;
-  const pair = torus ? pairIntersectsTorus : pairIntersects;
-  const triple = torus ? tripleIntersectsTorus : tripleIntersects;
+  const space = opts?.space ?? "planar";
+  const pair: PairFn =
+    space === "planar" ? pairIntersects : (a, b) => pairIntersectsOn(space, a, b);
+  const triple: TripleFn =
+    space === "planar"
+      ? tripleIntersects
+      : (a, b, c) => tripleIntersectsOn(space, a, b, c);
   const n = discs.length;
   const byDim: Simplex[][] = [];
   byDim.push(Array.from({ length: n }, (_, i) => [i]));
@@ -108,9 +116,9 @@ export function buildNerve(
   if (maxDim < 3) return { byDim };
   const triangleSet = new Set(triangles.map(simplexKey));
   byDim.push(
-    torus
-      ? enumerateTetrahedraTorus(discs, triangleSet)
-      : enumerateTetrahedraPlanar(triangleSet, n),
+    space === "planar"
+      ? enumerateTetrahedraPlanar(triangleSet, n)
+      : enumerateTetrahedraGeneric(discs, triangleSet, space),
   );
   return { byDim };
 }

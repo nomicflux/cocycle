@@ -9,6 +9,8 @@ import { useStore } from "./state/store";
 export default function App() {
   const clear = useStore((s) => s.clearDiscs);
   const addDisc = useStore((s) => s.addDisc);
+  const showCupProduct = useStore((s) => s.showCupProduct);
+  const setShowCupProduct = useStore((s) => s.setShowCupProduct);
   return (
     <div className="app">
       <header className="topbar">
@@ -17,6 +19,14 @@ export default function App() {
         <PresetsMenu />
         <button onClick={() => addDisc(Math.random() * 2 - 1, Math.random() * 2 - 1, 1.2)}>+ Disc</button>
         <button onClick={clear}>Clear all</button>
+        <label className="topbar-toggle">
+          <input
+            type="checkbox"
+            checked={showCupProduct}
+            onChange={(e) => setShowCupProduct(e.target.checked)}
+          />
+          Cup product
+        </label>
       </header>
       <main className="grid">
         <DrawingPanel />

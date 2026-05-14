@@ -1,7 +1,50 @@
+import { useState } from "react";
 import { useStore } from "../state/store";
-import { useNerve, applyCoboundary } from "../state/derived";
+import { useNerve, useCupResult, applyCoboundary } from "../state/derived";
 import type { Simplex } from "../state/types";
 import { simplexKey } from "../state/types";
+
+const CUP_COLOR = "#7c3aed";
+const FRONT_COLOR = "#06b6d4";
+const BACK_COLOR = "#fb7185";
+const SPLIT_COLOR = "#f59e0b";
+
+function FaceOverlay({
+  face,
+  positions,
+  color,
+  k,
+}: {
+  face: number[];
+  positions: [number, number][];
+  color: string;
+  k: string;
+}) {
+  if (face.length === 1) {
+    const [px, py] = positions[face[0]];
+    return (
+      <circle key={k} cx={px} cy={py} r={22} fill="none"
+        stroke={color} strokeWidth={4} strokeOpacity={0.85} pointerEvents="none" />
+    );
+  }
+  if (face.length === 2) {
+    const [a, b] = face.map((i) => positions[i]);
+    return (
+      <line key={k} x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]}
+        stroke={color} strokeWidth={9} strokeOpacity={0.55} pointerEvents="none" />
+    );
+  }
+  if (face.length === 3) {
+    const pts = face.map((i) => positions[i]);
+    return (
+      <polygon key={k}
+        points={pts.map((p) => `${p[0]},${p[1]}`).join(" ")}
+        fill={color} fillOpacity={0.3} stroke={color} strokeWidth={2.5}
+        strokeOpacity={0.85} pointerEvents="none" />
+    );
+  }
+  return null;
+}
 
 const W = 600;
 const H = 600;
@@ -122,6 +165,11 @@ export default function NerveGeomPanel() {
   const setShowLabels = useStore((s) => s.setShowLabels);
   const setShowArrows = useStore((s) => s.setShowArrows);
 
+  const showCupProduct = useStore((s) => s.showCupProduct);
+  const cupPreviewRaw = useCupResult();
+  const cupPreview = showCupProduct ? cupPreviewRaw : null;
+  const [hovered, setHovered] = useState<Simplex | null>(null);
+
   const n = nerve.byDim[0]?.length ?? 0;
   const positions = Array.from({ length: n }, (_, i) => vertexPos(i, n));
   const delta = applyCoboundary(cochainValues, nerve, k);
@@ -130,6 +178,24 @@ export default function NerveGeomPanel() {
   const failing = (s: Simplex): boolean => delta.has(simplexKey(s));
   const cVal = (s: Simplex): number => cochainValues.get(simplexKey(s)) ?? 0;
   const dVal = (s: Simplex): number => delta.get(simplexKey(s)) ?? 0;
+  const cupVal = (s: Simplex): number =>
+    cupPreview?.result.values.get(simplexKey(s)) ?? 0;
+
+  const cupResultDim = cupPreview?.result.degree ?? -1;
+  const hoverIsCupSimplex =
+    hovered !== null && hovered.length - 1 === cupResultDim && cupPreview !== null;
+  const hoverFront = hoverIsCupSimplex && cupPreview
+    ? hovered!.slice(0, cupPreview.leftDegree + 1)
+    : null;
+  const hoverBack = hoverIsCupSimplex && cupPreview
+    ? hovered!.slice(cupPreview.leftDegree)
+    : null;
+  const splitVertex = hoverIsCupSimplex && cupPreview
+    ? hovered![cupPreview.leftDegree]
+    : null;
+
+  const hoverIn = (s: Simplex) => setHovered(s);
+  const hoverOut = () => setHovered(null);
 
   return (
     <div className="panel">
@@ -162,6 +228,7 @@ export default function NerveGeomPanel() {
               fill={p.fill} fillOpacity={p.fillOpacity}
               stroke={p.stroke} strokeWidth={2}
               style={{ cursor: "pointer" }} onClick={() => toggle(t)}
+              onMouseEnter={() => hoverIn(t)} onMouseLeave={hoverOut}
             />
           );
         })}
@@ -175,6 +242,7 @@ export default function NerveGeomPanel() {
               x1={a[0]} y1={a[1]} x2={b[0]} y2={b[1]}
               stroke={p.stroke} strokeWidth={p.strokeWidth}
               style={{ cursor: "pointer" }} onClick={() => toggle(e)}
+              onMouseEnter={() => hoverIn(e)} onMouseLeave={hoverOut}
             />
           );
         })}
@@ -185,7 +253,8 @@ export default function NerveGeomPanel() {
           const fail = k === 0 && failing(sigma);
           const fill = sel ? "#eab308" : fail ? "#dc2626" : "#1e293b";
           return (
-            <g key={i} onClick={() => toggle(sigma)} style={{ cursor: "pointer" }}>
+            <g key={i} onClick={() => toggle(sigma)} style={{ cursor: "pointer" }}
+              onMouseEnter={() => hoverIn(sigma)} onMouseLeave={hoverOut}>
               <circle cx={p[0]} cy={p[1]} r={16}
                 fill={fill}
                 stroke={sel ? "#a16207" : "#0f172a"} strokeWidth={2} />
@@ -199,7 +268,8 @@ export default function NerveGeomPanel() {
           const [tx, ty] = centroid(t.map((i) => positions[i]));
           const p = tetraPresentation(same(selectedSimplex, t), k === 2 && failing(t));
           return (
-            <g key={simplexKey(t)} onClick={() => toggle(t)} style={{ cursor: "pointer" }}>
+            <g key={simplexKey(t)} onClick={() => toggle(t)} style={{ cursor: "pointer" }}
+              onMouseEnter={() => hoverIn(t)} onMouseLeave={hoverOut}>
               <rect x={tx - 36} y={ty - 11} width={72} height={22} rx={4}
                 fill={p.fill} fillOpacity={0.9} stroke={p.stroke} strokeWidth={1.5} />
               <text x={tx} y={ty} textAnchor="middle" dy="0.35em"
@@ -261,6 +331,51 @@ export default function NerveGeomPanel() {
           if (v === 0) return null;
           const [tx, ty] = centroid(t.map((i) => positions[i]));
           return <ValueBadge key={`d-${simplexKey(t)}`} x={tx + 60} y={ty} value={v} />;
+        })}
+
+        {cupPreview && (nerve.byDim[cupResultDim] ?? []).map((s) => {
+          const v = cupVal(s);
+          if (v === 0) return null;
+          return (
+            <FaceOverlay key={`cup-${simplexKey(s)}`} face={s}
+              positions={positions} color={CUP_COLOR} k={`cup-${simplexKey(s)}`} />
+          );
+        })}
+
+        {hoverIsCupSimplex && hoverBack && (
+          <FaceOverlay face={hoverBack} positions={positions}
+            color={BACK_COLOR} k="hover-back" />
+        )}
+        {hoverIsCupSimplex && hoverFront && (
+          <FaceOverlay face={hoverFront} positions={positions}
+            color={FRONT_COLOR} k="hover-front" />
+        )}
+        {hoverIsCupSimplex && splitVertex !== null && (() => {
+          const [px, py] = positions[splitVertex];
+          return (
+            <circle cx={px} cy={py} r={28} fill="none"
+              stroke={SPLIT_COLOR} strokeWidth={3} strokeDasharray="3 3"
+              pointerEvents="none" />
+          );
+        })()}
+
+        {showLabels && cupPreview && cupResultDim === 0 && (nerve.byDim[0] ?? []).map((s) => {
+          const v = cupVal(s);
+          if (v === 0) return null;
+          const [px, py] = positions[s[0]];
+          return <ValueBadge key={`cv-${simplexKey(s)}`} x={px - 30} y={py + 22} value={v} />;
+        })}
+        {showLabels && cupPreview && cupResultDim === 1 && (nerve.byDim[1] ?? []).map((e) => {
+          const v = cupVal(e);
+          if (v === 0) return null;
+          const [mx, my] = midpoint(positions[e[0]], positions[e[1]]);
+          return <ValueBadge key={`cv-${simplexKey(e)}`} x={mx} y={my + 20} value={v} />;
+        })}
+        {showLabels && cupPreview && cupResultDim === 2 && (nerve.byDim[2] ?? []).map((t) => {
+          const v = cupVal(t);
+          if (v === 0) return null;
+          const [cx, cy] = centroid(t.map((i) => positions[i]));
+          return <ValueBadge key={`cv-${simplexKey(t)}`} x={cx} y={cy + 28} value={v} />;
         })}
       </svg>
     </div>

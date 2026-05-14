@@ -38,3 +38,11 @@ export function intersectionPolygon(simDiscs: Disc[]): Array<[number, number]> {
   if (collected.length === 0) return [];
   return sortByAngle(collected);
 }
+
+export function intersectionCentroid(simDiscs: Disc[]): [number, number] | null {
+  const poly = intersectionPolygon(simDiscs);
+  if (poly.length === 0) return null;
+  const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length;
+  const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
+  return [cx, cy];
+}

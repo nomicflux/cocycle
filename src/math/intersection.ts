@@ -1,4 +1,4 @@
-import type { Disc } from "../state/types";
+import type { Disc, Space } from "../state/types";
 
 const EPS = 1e-9;
 
@@ -112,4 +112,96 @@ export function quadIntersectsTorus(a: Disc, b: Disc, c: Disc, d: Disc): boolean
     }
   }
   return false;
+}
+
+type EpsFn = (d: Disc) => Disc;
+
+const KLEIN_EPSILONS: EpsFn[] = [
+  (d) => d,
+  (d) => ({ ...d, cx: d.cx + TORUS_PERIOD, cy: d.cy }),
+  (d) => ({ ...d, cx: -d.cx, cy: d.cy + TORUS_PERIOD }),
+  (d) => ({ ...d, cx: -d.cx + TORUS_PERIOD, cy: d.cy + TORUS_PERIOD }),
+];
+
+const RP2_EPSILONS: EpsFn[] = [
+  (d) => d,
+  (d) => ({ ...d, cx: d.cx + TORUS_PERIOD, cy: -d.cy }),
+  (d) => ({ ...d, cx: -d.cx, cy: d.cy + TORUS_PERIOD }),
+  (d) => ({ ...d, cx: -d.cx + TORUS_PERIOD, cy: -d.cy - TORUS_PERIOD }),
+];
+
+function twistedTranslates(d: Disc, epsilons: EpsFn[]): Disc[] {
+  const out: Disc[] = [];
+  const L = 2 * TORUS_PERIOD;
+  for (const eps of epsilons) {
+    const base = eps(d);
+    for (const dx of [-L, 0, L]) {
+      for (const dy of [-L, 0, L]) {
+        out.push({ ...base, cx: base.cx + dx, cy: base.cy + dy });
+      }
+    }
+  }
+  return out;
+}
+
+export function spaceTranslates(d: Disc, space: Space): Disc[] {
+  switch (space) {
+    case "planar": return [d];
+    case "torus": return discTranslates(d);
+    case "klein": return twistedTranslates(d, KLEIN_EPSILONS);
+    case "projective": return twistedTranslates(d, RP2_EPSILONS);
+  }
+}
+
+export function pairIntersectsOn(space: Space, a: Disc, b: Disc): boolean {
+  for (const bt of spaceTranslates(b, space)) {
+    if (pairIntersects(a, bt)) return true;
+  }
+  return false;
+}
+
+export function tripleIntersectsOn(space: Space, a: Disc, b: Disc, c: Disc): boolean {
+  for (const bt of spaceTranslates(b, space)) {
+    for (const ct of spaceTranslates(c, space)) {
+      if (tripleIntersects(a, bt, ct)) return true;
+    }
+  }
+  return false;
+}
+
+export function quadIntersectsOn(space: Space, a: Disc, b: Disc, c: Disc, d: Disc): boolean {
+  for (const bt of spaceTranslates(b, space)) {
+    for (const ct of spaceTranslates(c, space)) {
+      for (const dt of spaceTranslates(d, space)) {
+        if (planarQuadNonEmpty(a, bt, ct, dt)) return true;
+      }
+    }
+  }
+  return false;
+}
+
+export function normalizePosition(
+  cx: number,
+  cy: number,
+  space: Space,
+): { cx: number; cy: number } {
+  const P = TORUS_PERIOD;
+  const HALF = P / 2;
+  if (space === "planar") return { cx, cy };
+  if (space === "torus") {
+    return {
+      cx: ((cx + HALF) % P + P) % P - HALF,
+      cy: ((cy + HALF) % P + P) % P - HALF,
+    };
+  }
+  let x = cx;
+  let y = cy;
+  for (let i = 0; i < 8; i++) {
+    if (y > HALF) { y -= P; x = space === "klein" ? -x : -x; continue; }
+    if (y < -HALF) { y += P; x = space === "klein" ? -x : -x; continue; }
+    if (x > HALF) { x -= P; if (space === "projective") y = -y; continue; }
+    if (x < -HALF) { x += P; if (space === "projective") y = -y; continue; }
+    break;
+  }
+  return { cx: x, cy: y };
 }

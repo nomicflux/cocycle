@@ -92,7 +92,7 @@ describe("buildNerve dispatch (4-disc torus loop)", () => {
     expect(nerve.byDim[3]).toHaveLength(0);
   });
   it("torus mode: 4 edges (cycle), 0 triangles", () => {
-    const nerve = buildNerve(discs, 3, { torus: true });
+    const nerve = buildNerve(discs, 3, { space: "torus" });
     expect(nerve.byDim[0]).toHaveLength(4);
     expect(nerve.byDim[1]).toHaveLength(4);
     expect(nerve.byDim[2]).toHaveLength(0);
@@ -101,7 +101,7 @@ describe("buildNerve dispatch (4-disc torus loop)", () => {
   });
   it("planar H¹ = 0; torus H¹ = ℤ", () => {
     const planar = buildNerve(discs);
-    const torus = buildNerve(discs, 3, { torus: true });
+    const torus = buildNerve(discs, 3, { space: "torus" });
     expect(cohomology(planar, 1).rank).toBe(0);
     expect(cohomology(torus, 0).rank).toBe(1);
     expect(cohomology(torus, 1).rank).toBe(1);

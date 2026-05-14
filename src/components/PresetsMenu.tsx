@@ -8,7 +8,7 @@ export default function PresetsMenu() {
       defaultValue=""
       onChange={(e) => {
         const p = presets.find((x) => x.id === e.target.value);
-        if (p) loadDiscs(p.discs, p.torusMode);
+        if (p) loadDiscs(p.discs, p.space);
         e.target.value = "";
       }}
     >

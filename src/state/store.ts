@@ -1,7 +1,7 @@
 import { create } from "zustand";
-import type { Disc, Simplex, SimplexKey } from "./types";
+import type { Disc, Simplex, SimplexKey, Space } from "./types";
 import { simplexKey } from "./types";
-import { TORUS_PERIOD } from "../math/intersection";
+import { TORUS_PERIOD, normalizePosition } from "../math/intersection";
 
 export type Snapshot = { id: string; name: string; discs: Disc[] };
 
@@ -19,13 +19,9 @@ const PASTELS = [
 ];
 const randomPastel = (): string => PASTELS[Math.floor(Math.random() * PASTELS.length)];
 
-const TORUS_MAX_R = TORUS_PERIOD / 2;
-const clampR = (r: number, torus: boolean): number =>
-  torus ? Math.min(r, TORUS_MAX_R) : r;
-const wrapMod = (x: number, period: number): number => {
-  const half = period / 2;
-  return ((x + half) % period + period) % period - half;
-};
+const MAX_R_QUOTIENT = TORUS_PERIOD / 2;
+const clampR = (r: number, space: Space): number =>
+  space === "planar" ? r : Math.min(r, MAX_R_QUOTIENT);
 
 type State = {
   discs: Disc[];
@@ -37,7 +33,11 @@ type State = {
   basisCursor: number;
   showLabels: boolean;
   showArrows: boolean;
-  torusMode: boolean;
+  space: Space;
+  cupPickedDegree: CohomologyDegree;
+  cupPickedIndex: number;
+  cupBasisOnLeft: boolean;
+  showCupProduct: boolean;
 };
 
 type Actions = {
@@ -48,7 +48,7 @@ type Actions = {
   clearDiscs: () => void;
   loadDiscs: (
     discs: Array<{ cx: number; cy: number; r: number; color?: string }>,
-    torusMode?: boolean,
+    space?: Space,
   ) => void;
   selectSimplex: (s: Simplex | null) => void;
   setCohomologyDegree: (d: CohomologyDegree) => void;
@@ -61,7 +61,11 @@ type Actions = {
   setBasisCursor: (i: number) => void;
   setShowLabels: (v: boolean) => void;
   setShowArrows: (v: boolean) => void;
-  setTorusMode: (v: boolean) => void;
+  setSpace: (s: Space) => void;
+  setCupPickedDegree: (d: CohomologyDegree) => void;
+  setCupPickedIndex: (i: number) => void;
+  setCupBasisOnLeft: (v: boolean) => void;
+  setShowCupProduct: (v: boolean) => void;
 };
 
 export const useStore = create<State & Actions>((set) => ({
@@ -74,31 +78,29 @@ export const useStore = create<State & Actions>((set) => ({
   basisCursor: 0,
   showLabels: true,
   showArrows: true,
-  torusMode: false,
+  space: "planar",
+  cupPickedDegree: 0,
+  cupPickedIndex: 0,
+  cupBasisOnLeft: true,
+  showCupProduct: false,
 
   addDisc: (cx, cy, r) =>
     set((s) => ({
       discs: [
         ...s.discs,
-        { id: makeDiscId(), cx, cy, r: clampR(r, s.torusMode), color: randomPastel() },
+        { id: makeDiscId(), cx, cy, r: clampR(r, s.space), color: randomPastel() },
       ],
     })),
   moveDisc: (id, cx, cy) =>
     set((s) => ({
       discs: s.discs.map((d) =>
-        d.id === id
-          ? {
-              ...d,
-              cx: s.torusMode ? wrapMod(cx, TORUS_PERIOD) : cx,
-              cy: s.torusMode ? wrapMod(cy, TORUS_PERIOD) : cy,
-            }
-          : d,
+        d.id === id ? { ...d, ...normalizePosition(cx, cy, s.space) } : d,
       ),
     })),
   resizeDisc: (id, r) =>
     set((s) => ({
       discs: s.discs.map((d) =>
-        d.id === id ? { ...d, r: clampR(r, s.torusMode) } : d,
+        d.id === id ? { ...d, r: clampR(r, s.space) } : d,
       ),
     })),
   removeDisc: (id) =>
@@ -109,17 +111,20 @@ export const useStore = create<State & Actions>((set) => ({
     })),
   clearDiscs: () =>
     set({ discs: [], selectedSimplex: null, cochainValues: new Map() }),
-  loadDiscs: (discs, torusMode) =>
+  loadDiscs: (discs, space) =>
     set((s) => {
-      const t = torusMode ?? s.torusMode;
+      const sp = space ?? s.space;
       return {
-        discs: discs.map((d) => ({
-          ...d,
-          id: makeDiscId(),
-          r: clampR(d.r, t),
-          color: d.color ?? randomPastel(),
-        })),
-        torusMode: t,
+        discs: discs.map((d) => {
+          const { cx, cy } = normalizePosition(d.cx, d.cy, sp);
+          return {
+            id: makeDiscId(),
+            cx, cy,
+            r: clampR(d.r, sp),
+            color: d.color ?? randomPastel(),
+          };
+        }),
+        space: sp,
         selectedSimplex: null,
         cochainValues: new Map(),
         basisCursor: 0,
@@ -157,12 +162,20 @@ export const useStore = create<State & Actions>((set) => ({
   setBasisCursor: (i) => set({ basisCursor: i }),
   setShowLabels: (v) => set({ showLabels: v }),
   setShowArrows: (v) => set({ showArrows: v }),
-  setTorusMode: (v) =>
-    set((s) => ({
-      torusMode: v,
+  setCupPickedDegree: (d) => set({ cupPickedDegree: d, cupPickedIndex: 0 }),
+  setCupPickedIndex: (i) => set({ cupPickedIndex: i }),
+  setCupBasisOnLeft: (v) => set({ cupBasisOnLeft: v }),
+  setShowCupProduct: (v) => set({ showCupProduct: v }),
+  setSpace: (sp) =>
+    set((state) => ({
+      space: sp,
       selectedSimplex: null,
       cochainValues: new Map(),
       basisCursor: 0,
-      discs: v ? s.discs.map((d) => ({ ...d, r: clampR(d.r, true) })) : s.discs,
+      discs: state.discs.map((d) => {
+        const r = clampR(d.r, sp);
+        const { cx, cy } = normalizePosition(d.cx, d.cy, sp);
+        return { ...d, r, cx, cy };
+      }),
     })),
 }));

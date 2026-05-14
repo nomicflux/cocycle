@@ -1,3 +1,4 @@
+export type Space = "planar" | "torus" | "klein" | "projective";
 export type Disc = { id: string; cx: number; cy: number; r: number; color: string };
 
 export type Simplex = number[];
