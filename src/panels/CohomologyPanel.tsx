@@ -1,5 +1,5 @@
 import { useStore } from "../state/store";
-import { useNerve, useCohomology, useCupResult, applyCoboundary } from "../state/derived";
+import { useNerve, useCohomology, useCupResult, applyCoboundary, useUnlocked } from "../state/derived";
 import type { Cochain, SimplexKey } from "../state/types";
 import { simplexKey } from "../state/types";
 import type { CohomologyDegree } from "../state/store";
@@ -17,9 +17,13 @@ function parseInt0(s: string): number {
 }
 
 function Tabs({ value, onChange }: { value: CohomologyDegree; onChange: (d: CohomologyDegree) => void }) {
+  const unlocked = useUnlocked();
+  const tabs: CohomologyDegree[] = [0];
+  if (unlocked.has("h1")) tabs.push(1);
+  if (unlocked.has("h2")) tabs.push(2);
   return (
     <div className="tabs">
-      {([0, 1, 2] as const).map((d) => (
+      {tabs.map((d) => (
         <button key={d} className={value === d ? "active" : ""} onClick={() => onChange(d)}>
           H<sup>{d}</sup>
         </button>

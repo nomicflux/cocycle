@@ -2,6 +2,14 @@ import { create } from "zustand";
 import type { Disc, Simplex, SimplexKey, Space } from "./types";
 import { simplexKey } from "./types";
 import { TORUS_PERIOD, normalizePosition } from "../math/intersection";
+import {
+  loadFromStorage,
+  saveConsent,
+  saveTutorialState,
+  markVisited as markVisitedStorage,
+} from "../tutorial/persistence";
+import type { Consent, SceneSpec, TutorialMode } from "../tutorial/types";
+import { CHAPTERS } from "../tutorial/chapters";
 
 export type Snapshot = { id: string; name: string; discs: Disc[] };
 
@@ -23,6 +31,19 @@ const MAX_R_QUOTIENT = TORUS_PERIOD / 2;
 const clampR = (r: number, space: Space): number =>
   space === "planar" ? r : Math.min(r, MAX_R_QUOTIENT);
 
+function discsFromScene(scene: SceneSpec, space: Space): Disc[] {
+  return scene.discs.map((d) => {
+    const norm = normalizePosition(d.cx, d.cy, space);
+    return {
+      id: makeDiscId(),
+      cx: norm.cx,
+      cy: norm.cy,
+      r: clampR(d.r, space),
+      color: d.color ?? randomPastel(),
+    };
+  });
+}
+
 type State = {
   discs: Disc[];
   selectedSimplex: Simplex | null;
@@ -38,6 +59,11 @@ type State = {
   cupPickedIndex: number;
   cupBasisOnLeft: boolean;
   showCupProduct: boolean;
+  tutorialMode: TutorialMode;
+  tutorialStep: number;
+  consent: Consent;
+  visited: boolean;
+  glossaryOpen: boolean;
 };
 
 type Actions = {
@@ -66,23 +92,52 @@ type Actions = {
   setCupPickedIndex: (i: number) => void;
   setCupBasisOnLeft: (v: boolean) => void;
   setShowCupProduct: (v: boolean) => void;
+  enterTutorial: () => void;
+  exitTutorial: () => void;
+  nextStep: () => void;
+  prevStep: () => void;
+  jumpToStep: (n: number) => void;
+  setConsent: (c: Consent) => void;
+  markVisited: () => void;
+  setGlossaryOpen: (v: boolean) => void;
 };
 
-export const useStore = create<State & Actions>((set) => ({
-  discs: [],
+const persisted = loadFromStorage();
+
+const initialTutorialMode = persisted.tutorialMode;
+const initialTutorialStep = Math.min(
+  Math.max(0, persisted.tutorialStep),
+  CHAPTERS.length - 1,
+);
+const initialSpace: Space = initialTutorialMode === "tutorial" ? "torus" : "planar";
+const initialSceneAtBoot =
+  initialTutorialMode === "tutorial"
+    ? CHAPTERS[initialTutorialStep]?.scene
+    : undefined;
+const initialDiscs: Disc[] = initialSceneAtBoot
+  ? discsFromScene(initialSceneAtBoot, initialSpace)
+  : [];
+
+export const useStore = create<State & Actions>((set, get) => ({
+  discs: initialDiscs,
   selectedSimplex: null,
-  cohomologyDegree: 1,
+  cohomologyDegree: initialTutorialMode === "tutorial" ? 0 : 1,
   cochainValues: new Map(),
   snapshots: [],
   compareWithSnapshot: null,
   basisCursor: 0,
   showLabels: true,
-  showArrows: true,
-  space: "planar",
+  showArrows: initialTutorialMode === "tutorial" ? false : true,
+  space: initialSpace,
   cupPickedDegree: 0,
   cupPickedIndex: 0,
   cupBasisOnLeft: true,
   showCupProduct: false,
+  tutorialMode: initialTutorialMode,
+  tutorialStep: initialTutorialStep,
+  consent: persisted.consent,
+  visited: persisted.visited,
+  glossaryOpen: false,
 
   addDisc: (cx, cy, r) =>
     set((s) => ({
@@ -178,4 +233,96 @@ export const useStore = create<State & Actions>((set) => ({
         return { ...d, r, cx, cy };
       }),
     })),
+
+  enterTutorial: () => {
+    const s = get();
+    const step = Math.min(s.tutorialStep, CHAPTERS.length - 1);
+    const scene = CHAPTERS[step]?.scene;
+    saveTutorialState(s.consent, "tutorial", step);
+    set({
+      tutorialMode: "tutorial",
+      tutorialStep: step,
+      space: "torus",
+      selectedSimplex: null,
+      cochainValues: new Map(),
+      basisCursor: 0,
+      cohomologyDegree: 0,
+      showCupProduct: false,
+      showArrows: false,
+      discs: scene ? discsFromScene(scene, "torus") : s.discs,
+    });
+  },
+
+  exitTutorial: () => {
+    const s = get();
+    saveTutorialState(s.consent, "free", s.tutorialStep);
+    set({ tutorialMode: "free" });
+  },
+
+  nextStep: () => {
+    const s = get();
+    const last = CHAPTERS.length - 1;
+    const newStep = Math.min(s.tutorialStep + 1, last);
+    if (newStep === s.tutorialStep) return;
+    const prevScene = CHAPTERS[s.tutorialStep]?.scene;
+    const newScene = CHAPTERS[newStep]?.scene;
+    saveTutorialState(s.consent, "tutorial", newStep);
+    const update: Partial<State> = { tutorialStep: newStep };
+    if (newScene && newScene !== prevScene) {
+      update.discs = discsFromScene(newScene, "torus");
+      update.selectedSimplex = null;
+      update.cochainValues = new Map();
+      update.basisCursor = 0;
+    }
+    set(update);
+  },
+
+  prevStep: () => {
+    const s = get();
+    const newStep = Math.max(0, s.tutorialStep - 1);
+    if (newStep === s.tutorialStep) return;
+    const prevScene = CHAPTERS[s.tutorialStep]?.scene;
+    const newScene = CHAPTERS[newStep]?.scene;
+    saveTutorialState(s.consent, "tutorial", newStep);
+    const update: Partial<State> = { tutorialStep: newStep };
+    if (newScene && newScene !== prevScene) {
+      update.discs = discsFromScene(newScene, "torus");
+      update.selectedSimplex = null;
+      update.cochainValues = new Map();
+      update.basisCursor = 0;
+    }
+    set(update);
+  },
+
+  jumpToStep: (n) => {
+    const s = get();
+    const step = Math.min(Math.max(0, n), CHAPTERS.length - 1);
+    if (step === s.tutorialStep) return;
+    const scene = CHAPTERS[step]?.scene;
+    saveTutorialState(s.consent, "tutorial", step);
+    set({
+      tutorialStep: step,
+      discs: scene ? discsFromScene(scene, "torus") : s.discs,
+      selectedSimplex: null,
+      cochainValues: new Map(),
+      basisCursor: 0,
+    });
+  },
+
+  setConsent: (c) => {
+    saveConsent(c);
+    const s = get();
+    if (c === "accepted") {
+      saveTutorialState(c, s.tutorialMode, s.tutorialStep);
+    }
+    set({ consent: c });
+  },
+
+  markVisited: () => {
+    const s = get();
+    markVisitedStorage(s.consent);
+    set({ visited: true });
+  },
+
+  setGlossaryOpen: (v) => set({ glossaryOpen: v }),
 }));

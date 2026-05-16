@@ -7,6 +7,9 @@ import { faces } from "../math/coboundary";
 import { cup } from "../math/cup";
 import type { Cochain, Nerve, SimplexKey } from "./types";
 import { simplexKey } from "./types";
+import type { Feature } from "../tutorial/types";
+import { ALL_FEATURES } from "../tutorial/types";
+import { CHAPTERS, cumulativeUnlocks } from "../tutorial/chapters";
 
 export function useNerve(): Nerve {
   const discs = useStore((s) => s.discs);
@@ -84,4 +87,46 @@ export function applyCoboundary(
     if (acc !== 0) result.set(simplexKey(tau), acc);
   }
   return result;
+}
+
+export function useUnlocked(): Set<Feature> {
+  const mode = useStore((s) => s.tutorialMode);
+  const step = useStore((s) => s.tutorialStep);
+  return useMemo(() => {
+    if (mode === "free") return new Set(ALL_FEATURES);
+    return cumulativeUnlocks(step);
+  }, [mode, step]);
+}
+
+export function useGoalReached(): boolean {
+  const mode = useStore((s) => s.tutorialMode);
+  const step = useStore((s) => s.tutorialStep);
+  const discs = useStore((s) => s.discs);
+  const cochainValues = useStore((s) => s.cochainValues);
+  const cohomologyDegree = useStore((s) => s.cohomologyDegree);
+  const selectedSimplex = useStore((s) => s.selectedSimplex);
+  const basisCursor = useStore((s) => s.basisCursor);
+  const showArrows = useStore((s) => s.showArrows);
+  const showCupProduct = useStore((s) => s.showCupProduct);
+  const cupPickedIndex = useStore((s) => s.cupPickedIndex);
+  const nerve = useNerve();
+  return useMemo(() => {
+    if (mode !== "tutorial") return false;
+    const chap = CHAPTERS[step];
+    if (!chap || !chap.goal) return true;
+    return chap.goal({
+      discs,
+      nerve,
+      cochainValues,
+      cohomologyDegree,
+      selectedSimplex,
+      basisCursor,
+      showArrows,
+      showCupProduct,
+      cupPickedIndex,
+    });
+  }, [
+    mode, step, discs, nerve, cochainValues, cohomologyDegree,
+    selectedSimplex, basisCursor, showArrows, showCupProduct, cupPickedIndex,
+  ]);
 }
