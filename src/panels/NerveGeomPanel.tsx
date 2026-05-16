@@ -136,6 +136,20 @@ function ValueBadge({ x, y, value }: { x: number; y: number; value: number }) {
   );
 }
 
+function DDZeroBadge({ x, y }: { x: number; y: number }) {
+  return (
+    <g pointerEvents="none">
+      <rect x={x - 26} y={y - 9} width={52} height={18} rx={4}
+        fill="#dcfce7" stroke="#15803d" strokeWidth={1} />
+      <text x={x} y={y} textAnchor="middle" dy="0.32em"
+        fontSize="10" fontFamily="ui-monospace, monospace" fill="#14532d"
+        fontWeight={600}>
+        δ²c = 0
+      </text>
+    </g>
+  );
+}
+
 function trianglePresentation(sel: boolean, fail: boolean) {
   if (sel) return { fill: "#facc15", fillOpacity: 0.75, stroke: "#a16207" };
   if (fail) return { fill: "#fca5a5", fillOpacity: 0.7, stroke: "#dc2626" };
@@ -173,6 +187,7 @@ export default function NerveGeomPanel() {
   const n = nerve.byDim[0]?.length ?? 0;
   const positions = Array.from({ length: n }, (_, i) => vertexPos(i, n));
   const delta = applyCoboundary(cochainValues, nerve, k);
+  const hasNontrivialDelta = delta.size > 0;
 
   const toggle = (s: Simplex) => selectSimplex(same(selectedSimplex, s) ? null : s);
   const failing = (s: Simplex): boolean => delta.has(simplexKey(s));
@@ -331,6 +346,15 @@ export default function NerveGeomPanel() {
           if (v === 0) return null;
           const [tx, ty] = centroid(t.map((i) => positions[i]));
           return <ValueBadge key={`d-${simplexKey(t)}`} x={tx + 60} y={ty} value={v} />;
+        })}
+
+        {showLabels && hasNontrivialDelta && k === 0 && (nerve.byDim[2] ?? []).map((t) => {
+          const [cx, cy] = centroid(t.map((i) => positions[i]));
+          return <DDZeroBadge key={`dd-${simplexKey(t)}`} x={cx} y={cy} />;
+        })}
+        {showLabels && hasNontrivialDelta && k === 1 && (nerve.byDim[3] ?? []).map((t) => {
+          const [tx, ty] = centroid(t.map((i) => positions[i]));
+          return <DDZeroBadge key={`dd-${simplexKey(t)}`} x={tx + 60} y={ty + 20} />;
         })}
 
         {cupPreview && (nerve.byDim[cupResultDim] ?? []).map((s) => {

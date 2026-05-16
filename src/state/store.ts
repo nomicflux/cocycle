@@ -31,6 +31,8 @@ const MAX_R_QUOTIENT = TORUS_PERIOD / 2;
 const clampR = (r: number, space: Space): number =>
   space === "planar" ? r : Math.min(r, MAX_R_QUOTIENT);
 
+const keyDim = (k: SimplexKey): number => k.split(",").length - 1;
+
 function discsFromScene(scene: SceneSpec, space: Space): Disc[] {
   return scene.discs.map((d) => {
     const norm = normalizePosition(d.cx, d.cy, space);
@@ -188,7 +190,7 @@ export const useStore = create<State & Actions>((set, get) => ({
 
   selectSimplex: (s) => set({ selectedSimplex: s }),
   setCohomologyDegree: (d) =>
-    set({ cohomologyDegree: d, cochainValues: new Map(), basisCursor: 0 }),
+    set({ cohomologyDegree: d, basisCursor: 0 }),
   setCochainValue: (sigma, v) =>
     set((s) => {
       const key = simplexKey(sigma);
@@ -197,9 +199,23 @@ export const useStore = create<State & Actions>((set, get) => ({
       else next.set(key, v);
       return { cochainValues: next };
     }),
-  clearCochain: () => set({ cochainValues: new Map() }),
+  clearCochain: () =>
+    set((s) => {
+      const next = new Map(s.cochainValues);
+      for (const key of [...next.keys()]) {
+        if (keyDim(key) === s.cohomologyDegree) next.delete(key);
+      }
+      return { cochainValues: next };
+    }),
   applyCochain: (degree, values) =>
-    set({ cohomologyDegree: degree, cochainValues: new Map(values) }),
+    set((s) => {
+      const next = new Map(s.cochainValues);
+      for (const key of [...next.keys()]) {
+        if (keyDim(key) === degree) next.delete(key);
+      }
+      for (const [k, v] of values) next.set(k, v);
+      return { cohomologyDegree: degree, cochainValues: next };
+    }),
 
   saveSnapshot: (name) =>
     set((s) => ({

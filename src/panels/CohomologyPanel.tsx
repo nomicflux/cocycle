@@ -61,8 +61,21 @@ function CochainEditor({ k }: { k: CohomologyDegree }) {
 function CoboundaryDisplay({ k }: { k: CohomologyDegree }) {
   const nerve = useNerve();
   const cochainValues = useStore((s) => s.cochainValues);
+  const applyCochainAction = useStore((s) => s.applyCochain);
   const delta = applyCoboundary(cochainValues, nerve, k);
   if (delta.size === 0) return null;
+
+  const nextDegreeExists = k + 1 <= 2;
+  const ddelta = nextDegreeExists
+    ? applyCoboundary(delta, nerve, k + 1)
+    : new Map<SimplexKey, number>();
+  const ddZero = ddelta.size === 0;
+
+  const push = (): void => {
+    if (!nextDegreeExists) return;
+    applyCochainAction((k + 1) as CohomologyDegree, delta);
+  };
+
   return (
     <div className="coboundary-display">
       <div>
@@ -73,6 +86,19 @@ function CoboundaryDisplay({ k }: { k: CohomologyDegree }) {
           <li key={key}><code>{`{${key}}`}</code>: {v}</li>
         ))}
       </ul>
+      {nextDegreeExists && (
+        <div className={ddZero ? "dd-check" : "dd-check dd-check--fail"}>
+          {ddZero ? "δ(δc) = 0 ✓" : `δ(δc) ≠ 0 — bug!`}
+          <span className="dd-aside">
+            {" "}— so pushing δc into H<sup>{k + 1}</sup> yields a cochain that is automatically a cocycle (this is δ² = 0).
+          </span>
+        </div>
+      )}
+      {nextDegreeExists && (
+        <button className="push-delta-btn" onClick={push}>
+          ↪ Push δc into the H<sup>{k + 1}</sup> editor
+        </button>
+      )}
     </div>
   );
 }
