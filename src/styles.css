@@ -247,7 +247,21 @@ body {
 .tutorial-bar {
   background: #fef3c7; border-top: 2px solid #a16207;
   padding: 10px 16px; display: flex; flex-direction: column; gap: 6px;
-  max-height: 35vh; overflow-y: auto;
+  position: relative; overflow: hidden; min-height: 72px;
+}
+.tutorial-resize {
+  position: absolute; top: -5px; left: 0; right: 0; height: 10px;
+  cursor: ns-resize; z-index: 5;
+  touch-action: none;
+}
+.tutorial-resize::before {
+  content: ''; position: absolute; top: 4px; left: 50%;
+  transform: translateX(-50%);
+  width: 44px; height: 3px; background: #a16207; opacity: 0.35;
+  border-radius: 2px;
+}
+.tutorial-resize:hover::before, .tutorial-resize:active::before {
+  opacity: 0.85;
 }
 .tutorial-header {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -265,9 +279,10 @@ body {
 .exit-link:hover { color: #422006; }
 .tutorial-prose {
   color: #422006; line-height: 1.55; font-size: 13px;
-  max-width: 900px; white-space: pre-line;
+  white-space: pre-line;
+  flex: 1 1 auto; overflow-y: auto; min-height: 0;
 }
-.tutorial-paragraph { margin: 0 0 8px 0; }
+.tutorial-paragraph { margin: 0 0 8px 0; max-width: 900px; }
 .tutorial-paragraph:last-child { margin-bottom: 0; }
 .tutorial-prose strong { color: #422006; font-weight: 700; }
 .tutorial-controls {

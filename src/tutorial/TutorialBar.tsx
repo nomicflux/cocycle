@@ -1,7 +1,11 @@
-import type { ReactNode } from "react";
+import { useRef, useState, type ReactNode, type PointerEvent as RPointerEvent } from "react";
 import { useStore } from "../state/store";
 import { useGoalReached } from "../state/derived";
 import { CHAPTERS } from "./chapters";
+
+const DEFAULT_HEIGHT = 200;
+const MIN_HEIGHT = 72;
+const MAX_HEIGHT_FRAC = 0.7;
 
 function renderInline(text: string): ReactNode[] {
   const re = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
@@ -31,6 +35,25 @@ export default function TutorialBar() {
   const exit = useStore((s) => s.exitTutorial);
   const goalReached = useGoalReached();
 
+  const [height, setHeight] = useState<number>(DEFAULT_HEIGHT);
+  const dragRef = useRef<{ startY: number; startH: number } | null>(null);
+
+  const onResizeDown = (e: RPointerEvent<HTMLDivElement>): void => {
+    dragRef.current = { startY: e.clientY, startH: height };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  };
+  const onResizeMove = (e: RPointerEvent<HTMLDivElement>): void => {
+    if (!dragRef.current) return;
+    const dy = dragRef.current.startY - e.clientY;
+    const max = window.innerHeight * MAX_HEIGHT_FRAC;
+    const next = Math.max(MIN_HEIGHT, Math.min(max, dragRef.current.startH + dy));
+    setHeight(next);
+  };
+  const onResizeUp = (e: RPointerEvent<HTMLDivElement>): void => {
+    dragRef.current = null;
+    e.currentTarget.releasePointerCapture(e.pointerId);
+  };
+
   if (mode !== "tutorial") return null;
   const chap = CHAPTERS[step];
   if (!chap) return null;
@@ -39,7 +62,17 @@ export default function TutorialBar() {
   const finalChapter = step === last;
 
   return (
-    <div className="tutorial-bar">
+    <div className="tutorial-bar" style={{ height }}>
+      <div
+        className="tutorial-resize"
+        onPointerDown={onResizeDown}
+        onPointerMove={onResizeMove}
+        onPointerUp={onResizeUp}
+        onPointerCancel={onResizeUp}
+        title="Drag to resize the tutorial panel"
+        aria-label="Resize tutorial panel"
+        role="separator"
+      />
       <div className="tutorial-header">
         <div className="tutorial-title">
           <span className="tutorial-progress">
