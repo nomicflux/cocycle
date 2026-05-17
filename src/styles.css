@@ -136,13 +136,6 @@ body {
   background: #fee2e2; border-left-color: #b91c1c; color: #7f1d1d;
 }
 .dd-aside { color: #475569; font-weight: 400; font-style: italic; font-size: 11px; }
-.push-delta-btn {
-  margin-top: 8px; padding: 5px 12px; border-radius: 4px;
-  border: 1px solid #15803d; background: #ecfdf5; color: #14532d;
-  cursor: pointer; font-size: 12px; font-weight: 600;
-}
-.push-delta-btn:hover { background: #d1fae5; }
-
 .snapshot-bar {
   padding: 6px 12px; background: #f1f5f9; border-top: 1px solid #cbd5e1;
   display: flex; gap: 6px; align-items: center; overflow-x: auto;
@@ -204,6 +197,58 @@ body {
 .grid--cols-1 { grid-template-columns: 1fr; grid-template-rows: 1fr; }
 .grid--cols-2 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr; }
 .grid--cols-3, .grid--cols-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+.grid--chain {
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  grid-auto-flow: column;
+}
+.grid--chain .cohomology-panel {
+  grid-column: 2; grid-row: 1 / span 2;
+}
+
+.pair-selector {
+  display: flex; align-items: center; gap: 8px;
+  padding: 6px 8px; background: #f8fafc; border-radius: 4px;
+  margin-bottom: 8px;
+}
+.pair-selector button {
+  padding: 2px 10px; border: 1px solid #cbd5e1; background: #fff;
+  border-radius: 3px; cursor: pointer; font-size: 14px;
+}
+.pair-selector button:disabled { opacity: 0.35; cursor: default; }
+.pair-label { font-size: 13px; font-weight: 600; color: #1e293b; }
+
+.chain-view { display: flex; flex-direction: column; gap: 10px; }
+
+.layer-card {
+  border: 1px solid #e4e4e7; border-radius: 6px;
+  padding: 10px 12px; background: #fff;
+}
+.layer-card__title {
+  font-size: 13px; font-weight: 600; color: #1e293b; margin-bottom: 6px;
+}
+
+.shadow-row--header {
+  display: grid; grid-template-columns: 1fr 70px 60px;
+  gap: 8px; align-items: center;
+  font-size: 11px; color: #64748b; font-weight: 600;
+  padding-bottom: 2px; border-bottom: 1px solid #e4e4e7; margin-bottom: 2px;
+}
+.cochain-row--shadow {
+  display: grid; grid-template-columns: 1fr 70px 60px;
+  gap: 8px; align-items: center;
+}
+.cochain-row--shadow input { width: 100%; }
+.shadow-cell {
+  font-family: ui-monospace, monospace; font-size: 12px;
+  color: #94a3b8; text-align: center;
+  padding: 2px 4px; border-radius: 3px; background: #f8fafc;
+}
+.shadow-cell--match { color: #15803d; background: #dcfce7; font-weight: 600; }
+
+.anno-yes { color: #059669; font-weight: 600; }
+.anno-no { color: #b45309; font-weight: 600; }
 
 .tutorial-launcher {
   background: #facc15 !important; color: #422006 !important;
@@ -381,3 +426,112 @@ body {
   color: #1e293b; font-size: 13px; line-height: 1.55;
 }
 .glossary-long em, .glossary-short em { color: #475569; }
+
+.delta-eq-section { margin: 8px 0; }
+.delta-eq-section > h4 {
+  margin: 0 0 4px 0; font-size: 11px; font-weight: 600;
+  color: #475569; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.layer-card__section-title {
+  margin: 8px 0 4px; font-size: 11px; font-weight: 600;
+  color: #475569; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.delta-eq-list {
+  border: 1px solid #e4e4e7; border-radius: 4px;
+  background: #fcfcfd; padding: 4px 6px;
+}
+.delta-eq-row {
+  display: grid;
+  grid-template-columns: auto auto 1fr auto auto auto auto;
+  gap: 6px; align-items: center;
+  font-family: ui-monospace, monospace; font-size: 12px;
+  padding: 3px 4px;
+  border-bottom: 1px dashed #f1f5f9;
+}
+.delta-eq-row:last-child { border-bottom: none; }
+.delta-eq-target { color: #0891b2; font-weight: 500; }
+.delta-eq-symbolic, .delta-eq-numeric {
+  display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center;
+  color: #475569;
+}
+.delta-eq-term { display: inline-flex; align-items: center; gap: 2px; }
+.delta-eq-num { color: #1e293b; }
+.delta-eq-result {
+  padding: 1px 8px; border-radius: 3px; font-weight: 600;
+  font-family: ui-monospace, monospace; font-size: 12px;
+  white-space: nowrap;
+}
+.delta-eq-result--zero { background: #dcfce7; color: #15803d; }
+.delta-eq-result--nonzero { background: #fee2e2; color: #b91c1c; }
+
+.face-chip {
+  padding: 1px 5px; border: 1px solid #cbd5e1;
+  background: #fff; border-radius: 3px;
+  font-family: ui-monospace, monospace; font-size: 11px;
+  color: #1e293b; cursor: pointer;
+}
+.face-chip:hover { background: #f1f5f9; border-color: #94a3b8; }
+
+.h-chip-row {
+  margin: 8px 0 4px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px;
+  padding: 6px 8px; background: #ecfeff; border-radius: 4px;
+  border-left: 3px solid #06b6d4;
+}
+.h-chip {
+  padding: 4px 10px; background: #06b6d4; color: #fff;
+  border: none; border-radius: 4px; font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+}
+.h-chip:hover { background: #0891b2; }
+.h-chip--inert {
+  background: #cbd5e1; color: #475569; cursor: default;
+}
+.h-chip-meta { font-size: 11px; color: #475569; }
+.h-chip-class {
+  font-size: 11px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  color: #1e3a8a;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  padding: 1px 6px;
+  border-radius: 4px;
+}
+.h-chip-class--none { color: #94a3b8; background: #f8fafc; border-color: #e2e8f0; }
+.h-chip-nav {
+  display: inline-flex; align-items: center; gap: 4px;
+  font-size: 12px; color: #1e293b;
+}
+.h-chip-nav button {
+  padding: 1px 8px; border: 1px solid #cbd5e1; background: #fff;
+  border-radius: 3px; cursor: pointer; font-size: 12px;
+}
+.h-chip-nav button:hover { background: #f1f5f9; }
+.h-chip-clear {
+  margin-left: auto;
+  padding: 2px 10px; border: 1px solid #cbd5e1; background: #fff;
+  border-radius: 3px; cursor: pointer; font-size: 11px; color: #475569;
+}
+.h-chip-clear:hover { background: #f1f5f9; }
+
+.layer-status {
+  display: flex; gap: 18px; flex-wrap: wrap;
+  font-size: 12px; margin: 6px 0;
+  padding: 4px 8px; background: #f8fafc; border-radius: 3px;
+}
+
+.cup-q {
+  font-size: 12px; color: #475569;
+  padding: 2px 6px; background: #fff; border-radius: 3px;
+}
+
+.nerve-combined {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  min-height: 0;
+  overflow: hidden;
+}
+.nerve-combined > .panel { min-height: 0; }
+

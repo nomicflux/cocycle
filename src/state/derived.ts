@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useStore } from "./store";
 import { buildNerve } from "../math/nerve";
 import { connectedComponents } from "../math/components";
-import { cohomology, type CohomologyDim } from "../math/cohomology";
+import { classCoordinates, cohomology, isCoboundary, type CohomologyDim } from "../math/cohomology";
 import { faces } from "../math/coboundary";
 import { cup } from "../math/cup";
 import type { Cochain, Nerve, SimplexKey } from "./types";
@@ -69,6 +69,33 @@ export function useCupResult(): CupPreview | null {
       rightDegree: basisOnLeft ? q : pickedDegree,
     };
   }, [nerve, q, currentValues, pickedDegree, pickedIndex, basisOnLeft, basisH]);
+}
+
+export function useDeltaShadow(k: number): Map<SimplexKey, number> {
+  const nerve = useNerve();
+  const cochainValues = useStore((s) => s.cochainValues);
+  return useMemo(() => {
+    if (k <= 0) return new Map();
+    return applyCoboundary(cochainValues, nerve, k - 1);
+  }, [nerve, cochainValues, k]);
+}
+
+export function useIsCoboundary(k: number): boolean {
+  const nerve = useNerve();
+  const cochainValues = useStore((s) => s.cochainValues);
+  return useMemo(
+    () => isCoboundary(cochainValues, nerve, k),
+    [nerve, cochainValues, k],
+  );
+}
+
+export function useClassCoordinates(k: 0 | 1 | 2): number[] | null {
+  const nerve = useNerve();
+  const cochainValues = useStore((s) => s.cochainValues);
+  return useMemo(
+    () => classCoordinates(cochainValues, nerve, k),
+    [nerve, cochainValues, k],
+  );
 }
 
 export function applyCoboundary(

@@ -1,6 +1,5 @@
 import DrawingPanel from "./panels/DrawingPanel";
-import NerveSetPanel from "./panels/NerveSetPanel";
-import NerveGeomPanel from "./panels/NerveGeomPanel";
+import NervePanel from "./panels/NervePanel";
 import CohomologyPanel from "./panels/CohomologyPanel";
 import SnapshotBar from "./components/SnapshotBar";
 import PresetsMenu from "./components/PresetsMenu";
@@ -24,10 +23,12 @@ export default function App() {
 
   const panels = [
     unlocked.has("drawing") && <DrawingPanel key="drawing" />,
-    unlocked.has("nerve-set") && <NerveSetPanel key="nerve-set" />,
-    unlocked.has("nerve-geom") && <NerveGeomPanel key="nerve-geom" />,
+    (unlocked.has("nerve-geom") || unlocked.has("nerve-set")) && <NervePanel key="nerve" />,
     unlocked.has("cohomology") && <CohomologyPanel key="cohomology" />,
   ].filter(Boolean);
+  const gridClass = unlocked.has("cohomology") && panels.length >= 2
+    ? "grid grid--chain"
+    : `grid grid--cols-${panels.length}`;
 
   return (
     <div className="app">
@@ -63,7 +64,7 @@ export default function App() {
           Privacy
         </button>
       </header>
-      <main className={`grid grid--cols-${panels.length}`}>{panels}</main>
+      <main className={gridClass}>{panels}</main>
       {tutorialMode === "tutorial" ? <TutorialBar /> : <SnapshotBar />}
       <ConsentBanner />
       <WelcomeModal />

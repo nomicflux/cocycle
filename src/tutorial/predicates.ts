@@ -2,6 +2,7 @@ import type { Predicate } from "./types";
 import type { Nerve, SimplexKey } from "../state/types";
 import { simplexKey } from "../state/types";
 import { faces } from "../math/coboundary";
+import { classCoordinates } from "../math/cohomology";
 
 const keyDim = (k: SimplexKey): number => k.split(",").length - 1;
 
@@ -96,3 +97,14 @@ export const visitedSecondBasis: Predicate = ({ basisCursor }) =>
 
 export const usedCupProduct: Predicate = ({ showCupProduct, cohomologyDegree }) =>
   showCupProduct && cohomologyDegree === 1;
+
+export const addedDifferentCoboundary: Predicate = ({ nerve, cochainValues }) => {
+  const shadow = applyCoboundary(cochainValues, nerve, 0);
+  if (shadow.size === 0) return false;
+  const v01 = shadow.get("0,1") ?? 0;
+  const v02 = shadow.get("0,2") ?? 0;
+  const v12 = shadow.get("1,2") ?? 0;
+  if (v01 === 0 && v02 === 1 && v12 === 1) return false;
+  const coords = classCoordinates(cochainValues, nerve, 1);
+  return coords !== null && coords.length === 1 && coords[0] === 1;
+};
