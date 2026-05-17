@@ -89,34 +89,48 @@ export const CHAPTERS: Chapter[] = [
       "Keep your cocycle from the previous step in the H¹ editor. Click any one edge's input field and change its value by 1 (e.g. 0 → 1, or 1 → 2). The yellow 'δc ≠ 0' box reappears, listing every triangle whose alternating sum no longer cancels — and those triangles turn red in the 'Nerve (geometric)' panel.",
   },
   {
+    id: "generators",
+    title: "Free generators of H¹",
+    prose:
+      "An abelian group has *generators*: elements you can combine (with integer coefficients) to reach every element. A generator is **free** when it carries no torsion relation — there's no positive n with n·g = 0.\n\nIn our setting Hᵏ is itself an abelian group: cocycles modulo coboundaries. Its free generators answer 'what does a nontrivial cohomology class actually look like as a labelling?'\n\nEach generator is a *class*, not a single cochain. Any cocycle in the class is a **representative**: a concrete cochain that stands in for its whole equivalence class. Two representatives of the same class differ by a coboundary δb for some b, but the H¹ chip prints the same coordinates for both.\n\nThis canvas covers a loop with 3 overlapping discs. The nerve has 3 vertices, 3 edges, and no triangles (no point lies in all three discs at once), so δ¹ has nothing to act on — every 1-cochain is automatically a cocycle. H¹ comes out to ℤ — one free generator, geometrically 'walk once around the loop'.\n\nThe Cohomology panel's C¹ card now has a 'set c¹ to' cycler. Click › to load the generator's representative into the editor.",
+    scene: scenes.SCENE_CIRCLE_TRIANGLE,
+    unlocks: ["cocycle-basis"],
+    goal: P.hasH1Cocycle,
+    goalHint:
+      "On the H¹ tab, look for the 'set c¹ to' row on the C¹ card (below the H¹ = ℤ chip). Click ›. The cochain editor fills with a specific 1-cocycle representing H¹'s single free generator — its nonzero values trace the loop. With no triangles in the nerve, δc¹ is automatically zero, so this is a cocycle and the chapter advances.",
+  },
+  {
     id: "cohomology-circle",
     title: "Cohomology of the circle",
     prose:
       "This 3-disc cover of S¹ has 3 vertices, 3 edges, no 2-faces. With no triangles in the nerve, δ¹ has nothing to act on, so every 1-cochain is automatically a cocycle (Z¹ = C¹). H¹ on this cover is C¹ / B¹.\n\nType c({0,1}) = 1 on the C¹ card — c¹ = (1, 0, 0), and note the H¹ chip's class readout shows [1].\nNow pick a coboundary by typing c({2}) = 1 on the C⁰ card. The C¹ shadow column fills with δc⁰ = (0, +1, +1) on edges {0,1}, {0,2}, {1,2}.\nAdd that coboundary to the cocycle: set c¹ to (1, 1, 1). The class still reads [1].\n\nThese two distinct cocycles have the same H¹ class. That is the the quotient: cocycles that differ by a coboundary represent the same class in Hᵏ.",
     scene: scenes.SCENE_CIRCLE_TRIANGLE,
-    unlocks: ["cocycle-basis"],
+    unlocks: [],
     goal: P.addedDifferentCoboundary,
     goalHint:
       "On the C⁰ card, type a different 0-cochain — e.g., c({0}) = 1 instead of c({2}) = 1. The C¹ shadow column updates to a new δc⁰. Add the new shadow values to (1, 0, 0) and type the sum into c¹. The H¹ chip's class readout still reads [1].",
   },
   {
+    id: "good-cover",
+    title: "Good covers",
+    prose:
+      "A cover {U_i} of a space X is **good** when every nonempty finite intersection U_{i₀} ∩ ⋯ ∩ U_{iₖ} is *contractible* — it can be continuously shrunk to a point. For open regions of a surface that means one connected piece and no holes. Acconding to the Nerve Theorem, as long as we have a good cover, the nerve has the same cohomology as X.\n\nThe canvas currently has a bad cover of T². Any cover of S¹ by just 2 arcs has a pair-intersection in *two* components, one on each side of the circle. This intersection then isn't contractible.\n\nTransform this bad cover into a good one. A good cover of T² needs at least 3 sets along each S¹ factor in order to keep all intersections contractible. Use **+ Disc** in the topbar to add discs; drag bodies to position them and drag the small handles on each disc's right edge to resize.",
+    scene: scenes.SCENE_BAD_COVER,
+    unlocks: ["cover-status"],
+    goal: P.isGoodCover,
+    goalHint:
+      "The 2×2 starting cover has too few sets along each S¹ factor. Click + Disc in the topbar a few times to add new discs, then drag them between the existing corner discs so each torus direction has ≥3 disc centres. Large discs wrap onto themselves through the torus and re-introduce multi-component overlaps — drag the resize handles to shrink discs as you fill out the grid. The goal fires the instant the topbar chip reads *good cover ✓*.",
+  },
+  {
     id: "cohomology",
     title: "Cohomology of the torus",
     prose:
-      "S¹ has one independent loop and gave us H¹ = ℤ. The torus has *two* — two independent winding directions, each contributing a copy of ℤ to H¹. A single ring of discs can't see both; we need a genuine 2-D cover.\n\nThis 3×3 grid of discs is the simplest disc cover that realizes the torus topology in the nerve: 9 vertices, 36 edges, 36 triangles, 9 tetrahedra. The H¹ chip's class readout now has two coordinates — [a, b] ∈ ℤ². Click the chip to load g₁ (class [1, 0]); click ‹ › to step to g₂ (class [0, 1]). Type anything into c⁰ and the C¹ shadow column gives you a coboundary; its class reads [0, 0].\n\nThe theorem that makes this useful: Hᵏ depends only on the topology of the underlying space, *not* on the cover you chose. Two wildly different open covers of the torus give isomorphic cohomology. The cover is a calculation tool; H is the invariant.\n\nFor the torus:\n\n• H⁰(T²; ℤ) = ℤ — one connected component.\n• H¹(T²; ℤ) = ℤ² — two independent loop directions.\n• H²(T²; ℤ) = ℤ — one 2-dimensional fundamental class.\n\nUse the ◀ / ▶ focus selector at the top of the Cohomology panel to bring the C⁰ → C¹ pair into view, then confirm the H¹ chip on the C¹ card reads ℤ² (or ℤ ⊕ ℤ — same thing).",
-    scene: scenes.SCENE_TORUS_H1,
-    unlocks: [],
-  },
-  {
-    id: "generators",
-    title: "Free generators of H¹",
-    prose:
-      "A group like ℤ² has *generators*: two elements you can combine (with integer coefficients) to reach every element. Each generator is **free** because it carries no torsion relation — there's no positive n with n·g = 0. H¹(T²; ℤ) is the simplest possible non-trivial example: rank 2, no torsion, two free generators.\n\nGeometrically those generators correspond to the two independent ways a loop can wind around a torus: 'around the donut hole' and 'through the donut hole'. They're cohomology classes that are *not* coboundaries of any 0-cochain — that's the algebraic statement of 'these loops can't be contracted'.\n\nWhat does a cohomology *class* look like in the editor? Pick any cocycle in the class and you have a **representative** — a concrete cochain standing in for its equivalence class. Different representatives differ by coboundaries, but they all live in the same Hᵏ class.\n\nUse the panel's basis navigator to step through one representative per free generator and watch the edge values change.",
+      "S¹ has one independent loop and gave us H¹ = ℤ. The torus has two loops — two independent winding directions, each contributing a copy of ℤ to H¹. A single ring of discs can't see both; we need a full 2-D cover.\n\nThis 3×3 grid is the simplest *good* disc cover of the torus. Each axis needs ≥3 disc centres: two centres along one axis (half-period spacing) overlap both directly and via wraparound — the bad case from the previous chapter. Three centres per axis (⅓-period spacing) put the wraparound shifts out of overlap range, so every pair has a single connected intersection. Nerve: 9 vertices, 36 edges, 36 triangles, 9 tetrahedra.\n\nThe H¹ chip's class readout now has two coordinates — [a, b] ∈ ℤ². Use the 'set c¹ to' cycler on the C¹ card to step c¹ through g₁ and g₂; the class readout reads [1, 0] for g₁ and [0, 1] for g₂.\n\nHᵏ depends only on the topology of the underlying space, not on the (good) cover you chose. Two wildly different good covers of the torus give isomorphic cohomology. The cover is a calculation tool; H is the invariant.\n\nFor the torus:\n\n• H⁰(T²; ℤ) = ℤ — one connected component.\n• H¹(T²; ℤ) = ℤ² — two independent loop directions.\n• H²(T²; ℤ) = ℤ — one 2-dimensional fundamental class.\n\n",
     scene: scenes.SCENE_TORUS_H1,
     unlocks: ["cup-product"],
-    goal: P.visitedSecondBasis,
+    goal: P.equivalentTorusCover,
     goalHint:
-      "On the H¹ tab, look just below the H¹ = ℤ² header for a row reading 'representative 1 / 2' with ‹ and › buttons. Click ›. The cochain editor will fill with the specific 1-cocycle that represents the first generator. Click › again to land on 'representative 2 / 2' — the second generator. The non-zero edges change because the two representatives live in different cohomology classes.",
+      "Click '+ Disc' in the topbar to add a disc somewhere on the canvas. The goal fires when the new cover still has H⁰ = ℤ, H¹ = ℤ², and H² = ℤ — the topology of the torus survives a change of cover. If the cohomology shifts when you add the disc, drag it to a new location until the ranks settle back to (1, 2, 1).",
   },
   {
     id: "cup-product",

@@ -34,6 +34,15 @@ export const SCENE_TORUS_RING: SceneSpec = {
   ],
 };
 
+export const SCENE_BAD_COVER: SceneSpec = {
+  discs: [
+    { cx: -3, cy: -3, r: 4.3, color: "#fecaca" },
+    { cx: 3, cy: -3, r: 4.3, color: "#bbf7d0" },
+    { cx: -3, cy: 3, r: 4.3, color: "#bfdbfe" },
+    { cx: 3, cy: 3, r: 4.3, color: "#fed7aa" },
+  ],
+};
+
 export const SCENE_CIRCLE_TRIANGLE: SceneSpec = {
   discs: [
     { cx: 0, cy: 1.732, r: 1.6, color: "#fecaca" },

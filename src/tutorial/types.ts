@@ -16,7 +16,8 @@ export type Feature =
   | "cup-product"
   | "space-selector"
   | "presets"
-  | "snapshots";
+  | "snapshots"
+  | "cover-status";
 
 export const ALL_FEATURES: Feature[] = [
   "drawing",
@@ -32,6 +33,7 @@ export const ALL_FEATURES: Feature[] = [
   "space-selector",
   "presets",
   "snapshots",
+  "cover-status",
 ];
 
 export type SceneSpec = {

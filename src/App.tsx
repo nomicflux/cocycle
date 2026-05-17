@@ -9,7 +9,28 @@ import WelcomeModal from "./tutorial/WelcomeModal";
 import ConsentBanner from "./tutorial/ConsentBanner";
 import GlossaryModal from "./tutorial/GlossaryModal";
 import { useStore } from "./state/store";
-import { useUnlocked } from "./state/derived";
+import { useCoverStatus, useUnlocked } from "./state/derived";
+
+function CoverStatusChip() {
+  const status = useCoverStatus();
+  if (status.state === "empty") return null;
+  if (status.state === "incomplete") {
+    return <span className="cover-chip cover-chip--incomplete">cover incomplete</span>;
+  }
+  if (status.state === "good") {
+    return <span className="cover-chip cover-chip--good">good cover ✓</span>;
+  }
+  const dimName = status.witness.length === 2 ? "pair" : "triple";
+  const simplexLabel = `{${status.witness.join(",")}}`;
+  return (
+    <span
+      className="cover-chip cover-chip--bad"
+      title={`The ${dimName}-intersection of ${simplexLabel} has ${status.components} connected components; a good cover requires every nonempty intersection to be contractible (one connected piece).`}
+    >
+      bad cover — {dimName} {simplexLabel} has {status.components} components
+    </span>
+  );
+}
 
 export default function App() {
   const clear = useStore((s) => s.clearDiscs);
@@ -38,6 +59,7 @@ export default function App() {
         {unlocked.has("presets") && <PresetsMenu />}
         <button onClick={() => addDisc(Math.random() * 2 - 1, Math.random() * 2 - 1, 1.2)}>+ Disc</button>
         <button onClick={clear}>Clear all</button>
+        {unlocked.has("cover-status") && <CoverStatusChip />}
         {unlocked.has("cup-product") && (
           <label className="topbar-toggle">
             <input

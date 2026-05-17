@@ -535,3 +535,20 @@ body {
 }
 .nerve-combined > .panel { min-height: 0; }
 
+.cover-chip {
+  display: inline-flex; align-items: center;
+  font-size: 12px; padding: 3px 8px;
+  border-radius: 10px; border: 1px solid transparent;
+  white-space: nowrap;
+}
+.cover-chip--incomplete {
+  color: #64748b; background: #f1f5f9; border-color: #e2e8f0;
+}
+.cover-chip--good {
+  color: #166534; background: #dcfce7; border-color: #86efac;
+}
+.cover-chip--bad {
+  color: #991b1b; background: #fee2e2; border-color: #fca5a5;
+  cursor: help;
+}
+

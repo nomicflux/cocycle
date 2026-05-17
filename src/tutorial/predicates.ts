@@ -1,8 +1,9 @@
 import type { Predicate } from "./types";
-import type { Nerve, SimplexKey } from "../state/types";
+import type { Disc, Nerve, SimplexKey } from "../state/types";
 import { simplexKey } from "../state/types";
 import { faces } from "../math/coboundary";
-import { classCoordinates } from "../math/cohomology";
+import { classCoordinates, cohomology } from "../math/cohomology";
+import { coverComplete, pairComponentCount, tripleComponentCount } from "../math/intersection";
 
 const keyDim = (k: SimplexKey): number => k.split(",").length - 1;
 
@@ -97,6 +98,62 @@ export const visitedSecondBasis: Predicate = ({ basisCursor }) =>
 
 export const usedCupProduct: Predicate = ({ showCupProduct, cohomologyDegree }) =>
   showCupProduct && cohomologyDegree === 1;
+
+const INITIAL_TORUS_H1: Array<[number, number]> = [
+  [-4, -4], [0, -4], [4, -4],
+  [-4, 0],  [0, 0],  [4, 0],
+  [-4, 4],  [0, 4],  [4, 4],
+];
+
+function torusCoverChangeCount(discs: Disc[]): number {
+  const tolerance = 1.0;
+  const used = new Set<number>();
+  let matched = 0;
+  for (const d of discs) {
+    let bestI = -1, bestD = Infinity;
+    for (let i = 0; i < INITIAL_TORUS_H1.length; i++) {
+      if (used.has(i)) continue;
+      const dx = d.cx - INITIAL_TORUS_H1[i][0];
+      const dy = d.cy - INITIAL_TORUS_H1[i][1];
+      const dist = Math.hypot(dx, dy);
+      if (dist < bestD) { bestD = dist; bestI = i; }
+    }
+    if (bestI >= 0 && bestD < tolerance) {
+      matched++;
+      used.add(bestI);
+    }
+  }
+  return (discs.length - matched) + (INITIAL_TORUS_H1.length - matched);
+}
+
+export const equivalentTorusCover: Predicate = ({ discs, nerve }) => {
+  if (torusCoverChangeCount(discs) < 3) return false;
+  const h0 = cohomology(nerve, 0);
+  const h1 = cohomology(nerve, 1);
+  const h2 = cohomology(nerve, 2);
+  const torsionFree = (t: number[]) => t.length === 0;
+  return h0.rank === 1 && torsionFree(h0.torsion)
+    && h1.rank === 2 && torsionFree(h1.torsion)
+    && h2.rank === 1 && torsionFree(h2.torsion);
+};
+
+export const isGoodCover: Predicate = ({ discs }) => {
+  if (discs.length === 0) return false;
+  if (!coverComplete(discs, "torus")) return false;
+  for (let i = 0; i < discs.length; i++) {
+    for (let j = i + 1; j < discs.length; j++) {
+      if (pairComponentCount("torus", discs[i], discs[j]) > 1) return false;
+    }
+  }
+  for (let i = 0; i < discs.length; i++) {
+    for (let j = i + 1; j < discs.length; j++) {
+      for (let k = j + 1; k < discs.length; k++) {
+        if (tripleComponentCount("torus", discs[i], discs[j], discs[k]) > 1) return false;
+      }
+    }
+  }
+  return true;
+};
 
 export const addedDifferentCoboundary: Predicate = ({ nerve, cochainValues }) => {
   const shadow = applyCoboundary(cochainValues, nerve, 0);

@@ -5,11 +5,46 @@ import { connectedComponents } from "../math/components";
 import { classCoordinates, cohomology, isCoboundary, type CohomologyDim } from "../math/cohomology";
 import { faces } from "../math/coboundary";
 import { cup } from "../math/cup";
+import {
+  coverComplete,
+  pairComponentCount,
+  tripleComponentCount,
+} from "../math/intersection";
 import type { Cochain, Nerve, SimplexKey } from "./types";
 import { simplexKey } from "./types";
 import type { Feature } from "../tutorial/types";
 import { ALL_FEATURES } from "../tutorial/types";
 import { CHAPTERS, cumulativeUnlocks } from "../tutorial/chapters";
+
+export type CoverStatus =
+  | { state: "empty" }
+  | { state: "incomplete" }
+  | { state: "good" }
+  | { state: "bad"; witness: number[]; components: number };
+
+export function useCoverStatus(): CoverStatus {
+  const discs = useStore((s) => s.discs);
+  const space = useStore((s) => s.space);
+  return useMemo<CoverStatus>(() => {
+    if (discs.length === 0) return { state: "empty" };
+    if (!coverComplete(discs, space)) return { state: "incomplete" };
+    for (let i = 0; i < discs.length; i++) {
+      for (let j = i + 1; j < discs.length; j++) {
+        const n = pairComponentCount(space, discs[i], discs[j]);
+        if (n > 1) return { state: "bad", witness: [i, j], components: n };
+      }
+    }
+    for (let i = 0; i < discs.length; i++) {
+      for (let j = i + 1; j < discs.length; j++) {
+        for (let k = j + 1; k < discs.length; k++) {
+          const n = tripleComponentCount(space, discs[i], discs[j], discs[k]);
+          if (n > 1) return { state: "bad", witness: [i, j, k], components: n };
+        }
+      }
+    }
+    return { state: "good" };
+  }, [discs, space]);
+}
 
 export function useNerve(): Nerve {
   const discs = useStore((s) => s.discs);

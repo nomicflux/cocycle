@@ -1,5 +1,5 @@
-import type { Disc } from "../state/types";
-import { pointInDisc } from "../math/intersection";
+import type { Disc, Space } from "../state/types";
+import { pointInDisc, spaceTranslates } from "../math/intersection";
 
 function sampleCircle(d: Disc, n: number): Array<[number, number]> {
   const points: Array<[number, number]> = [];
@@ -45,4 +45,30 @@ export function intersectionCentroid(simDiscs: Disc[]): [number, number] | null 
   const cx = poly.reduce((s, p) => s + p[0], 0) / poly.length;
   const cy = poly.reduce((s, p) => s + p[1], 0) / poly.length;
   return [cx, cy];
+}
+
+function cartesian<T>(arrs: T[][]): T[][] {
+  if (arrs.length === 0) return [[]];
+  const rest = cartesian(arrs.slice(1));
+  const out: T[][] = [];
+  for (const v of arrs[0]) {
+    for (const r of rest) out.push([v, ...r]);
+  }
+  return out;
+}
+
+export function intersectionComponents(
+  space: Space,
+  simDiscs: Disc[],
+): Array<Array<[number, number]>> {
+  if (simDiscs.length === 0) return [];
+  if (simDiscs.length === 1) return [intersectionPolygon(simDiscs)];
+  const base = simDiscs[0];
+  const restTranslates = simDiscs.slice(1).map((d) => spaceTranslates(d, space));
+  const out: Array<Array<[number, number]>> = [];
+  for (const combo of cartesian(restTranslates)) {
+    const poly = intersectionPolygon([base, ...combo]);
+    if (poly.length > 2) out.push(poly);
+  }
+  return out;
 }

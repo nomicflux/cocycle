@@ -80,6 +80,48 @@ export function pairIntersectsTorus(a: Disc, b: Disc): boolean {
   return discTranslates(b).some((bt) => pairIntersects(a, bt));
 }
 
+export function pairComponentCount(space: Space, a: Disc, b: Disc): number {
+  let n = 0;
+  for (const bt of spaceTranslates(b, space)) {
+    if (pairIntersects(a, bt)) n++;
+  }
+  return n;
+}
+
+export function tripleComponentCount(space: Space, a: Disc, b: Disc, c: Disc): number {
+  let n = 0;
+  for (const bt of spaceTranslates(b, space)) {
+    for (const ct of spaceTranslates(c, space)) {
+      if (tripleIntersects(a, bt, ct)) n++;
+    }
+  }
+  return n;
+}
+
+export function coverComplete(discs: Disc[], space: Space): boolean {
+  if (space === "planar") return true;
+  if (discs.length === 0) return false;
+  const P = TORUS_PERIOD;
+  const HALF = P / 2;
+  const N = 40;
+  const step = P / N;
+  for (let i = 0; i < N; i++) {
+    const x = -HALF + (i + 0.5) * step;
+    for (let j = 0; j < N; j++) {
+      const y = -HALF + (j + 0.5) * step;
+      let covered = false;
+      for (const d of discs) {
+        for (const dt of spaceTranslates(d, space)) {
+          if (pointInDisc(x, y, dt)) { covered = true; break; }
+        }
+        if (covered) break;
+      }
+      if (!covered) return false;
+    }
+  }
+  return true;
+}
+
 export function tripleIntersectsTorus(a: Disc, b: Disc, c: Disc): boolean {
   const bs = discTranslates(b);
   const cs = discTranslates(c);

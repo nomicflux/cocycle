@@ -3,8 +3,42 @@ import type { Disc, Simplex, Space } from "../state/types";
 import { simplexKey } from "../state/types";
 import { useStore } from "../state/store";
 import { useNerve, useBasisCochain, useCupResult } from "../state/derived";
-import { intersectionPolygon, intersectionCentroid } from "../util/intersectionRegion";
-import { spaceTranslates } from "../math/intersection";
+import { intersectionCentroid, intersectionComponents } from "../util/intersectionRegion";
+import { TORUS_PERIOD, spaceTranslates } from "../math/intersection";
+
+const COMPONENT_COLORS: Array<[string, string]> = [
+  ["#facc15", "#a16207"],
+  ["#06b6d4", "#0e7490"],
+  ["#ec4899", "#be185d"],
+  ["#22c55e", "#15803d"],
+  ["#a855f7", "#7e22ce"],
+  ["#f97316", "#9a3412"],
+];
+
+function polygonLatticeRenders(
+  poly: Array<[number, number]>,
+  space: Space,
+): Array<Array<[number, number]>> {
+  if (space === "planar") return [poly];
+  const xs = poly.map((p) => p[0]);
+  const ys = poly.map((p) => p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const out: Array<Array<[number, number]>> = [];
+  for (let kx = -1; kx <= 1; kx++) {
+    for (let ky = -1; ky <= 1; ky++) {
+      const dx = kx * TORUS_PERIOD;
+      const dy = ky * TORUS_PERIOD;
+      if (
+        maxX + dx >= MATH_MIN && minX + dx <= MATH_MAX &&
+        maxY + dy >= MATH_MIN && minY + dy <= MATH_MAX
+      ) {
+        out.push(poly.map(([x, y]) => [x + dx, y + dy] as [number, number]));
+      }
+    }
+  }
+  return out;
+}
 
 const CUR_COLOR = "#0891b2";
 const BASIS_COLOR = "#fb7185";
@@ -207,13 +241,23 @@ export default function DrawingPanel() {
 
   const onPointerUp = () => setDrag(null);
 
-  const polygon =
-    selectedSimplex && selectedSimplex.every((i) => i < discs.length)
-      ? intersectionPolygon(selectedSimplex.map((i) => discs[i]))
+  const components =
+    selectedSimplex && selectedSimplex.length >= 2 && selectedSimplex.every((i) => i < discs.length)
+      ? intersectionComponents(space, selectedSimplex.map((i) => discs[i]))
       : [];
 
   const cmpDiscs = compareWith ? snapshots.find((s) => s.id === compareWith)?.discs ?? [] : [];
   const hasQuotient = space !== "planar";
+
+  const selectedDiscIdx =
+    selectedSimplex && selectedSimplex.length === 1 && selectedSimplex[0] < discs.length
+      ? selectedSimplex[0]
+      : -1;
+  const renderOrder: number[] = [];
+  for (let i = 0; i < discs.length; i++) {
+    if (i !== selectedDiscIdx) renderOrder.push(i);
+  }
+  if (selectedDiscIdx >= 0) renderOrder.push(selectedDiscIdx);
 
   return (
     <div className="panel drawing-panel">
@@ -255,7 +299,8 @@ export default function DrawingPanel() {
             strokeDasharray="8 6" pointerEvents="none"
           />
         )}
-        {discs.map((d, i) => {
+        {renderOrder.map((i) => {
+          const d = discs[i];
           const stroke = darken(d.color);
           const ghosts = ghostsFor(d, space);
           return (
@@ -300,13 +345,55 @@ export default function DrawingPanel() {
             strokeDasharray="6 4" pointerEvents="none"
           />
         ))}
-        {polygon.length > 2 && (
-          <polygon
-            points={polygon.map(([x, y]) => `${toSvgX(x)},${toSvgY(y)}`).join(" ")}
-            fill="#facc15" fillOpacity={0.55} stroke="#a16207" strokeWidth={2}
-            pointerEvents="none"
-          />
-        )}
+        {components.map((poly, idx) => {
+          const [fill, stroke] = COMPONENT_COLORS[idx % COMPONENT_COLORS.length];
+          const renders = polygonLatticeRenders(poly, space);
+          return (
+            <g key={`comp-${idx}`} pointerEvents="none">
+              {renders.map((rp, ri) => (
+                <polygon
+                  key={`comp-${idx}-${ri}`}
+                  points={rp.map(([x, y]) => `${toSvgX(x)},${toSvgY(y)}`).join(" ")}
+                  fill={fill} fillOpacity={0.55} stroke={stroke} strokeWidth={2}
+                />
+              ))}
+              {renders.map((rp, ri) => {
+                const rcx = rp.reduce((s, p) => s + p[0], 0) / rp.length;
+                const rcy = rp.reduce((s, p) => s + p[1], 0) / rp.length;
+                if (rcx < MATH_MIN || rcx > MATH_MAX || rcy < MATH_MIN || rcy > MATH_MAX) return null;
+                return (
+                  <text
+                    key={`comp-label-${idx}-${ri}`}
+                    x={toSvgX(rcx)} y={toSvgY(rcy)}
+                    textAnchor="middle" dy="0.32em"
+                    fontSize="11" fontFamily="ui-monospace, monospace"
+                    fill={stroke} stroke="#fff" strokeWidth={3} paintOrder="stroke"
+                  >
+                    C{idx + 1}
+                  </text>
+                );
+              })}
+            </g>
+          );
+        })}
+        {components.length > 0 && (() => {
+          const first = components[0];
+          const fcx = first.reduce((s, p) => s + p[0], 0) / first.length;
+          const fcy = first.reduce((s, p) => s + p[1], 0) / first.length;
+          return (
+            <text
+              x={toSvgX(fcx)} y={toSvgY(fcy) - 28}
+              textAnchor="middle"
+              fontSize="12" fontFamily="ui-sans-serif, system-ui"
+              fill="#0f172a" stroke="#fff" strokeWidth={3} paintOrder="stroke"
+              pointerEvents="none"
+            >
+              {components.length === 1
+                ? "intersection: 1 component"
+                : `intersection: ${components.length} components`}
+            </text>
+          );
+        })()}
         {showCupProduct && (
           <CochainOverlay
             discs={discs}

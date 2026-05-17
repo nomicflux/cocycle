@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useStore } from "../state/store";
 import {
   useNerve,
@@ -186,45 +186,40 @@ function CohomologyChip({ k }: { k: CohomologyDegree }) {
   const applyCochain = useStore((s) => s.applyCochain);
   const clearCochain = useStore((s) => s.clearCochain);
   const setCohomologyDegree = useStore((s) => s.setCohomologyDegree);
-  const [idx, setIdx] = useState(0);
+  const setBasisCursor = useStore((s) => s.setBasisCursor);
+  const [pos, setPos] = useState<number>(-1);
 
   const generators = cohK.cocycleBasis.filter((c) => !c.isCoboundary);
+  const N = generators.length;
   const hText = formatGroup(cohK.rank, cohK.torsion);
-  const safeIdx = generators.length > 0 ? idx % generators.length : 0;
   const coordsText =
-    coords === null
-      ? null
-      : coords.length === 0
-      ? null
-      : `[${coords.join(", ")}]`;
+    coords === null ? null : coords.length === 0 ? null : `[${coords.join(", ")}]`;
 
-  const load = (next: number) => {
-    if (generators.length === 0) return;
-    const i = ((next % generators.length) + generators.length) % generators.length;
+  useEffect(() => { if (pos >= N) setPos(-1); }, [N, pos]);
+
+  const goto = (next: number) => {
+    if (N === 0) return;
+    const cycleLen = N + 1;
+    const cycled = (((next + 1) % cycleLen) + cycleLen) % cycleLen - 1;
+    setPos(cycled);
+    setBasisCursor(cycled);
     setCohomologyDegree(k);
-    applyCochain(k, generators[i].cochain.values);
-    setIdx(i);
+    if (cycled === -1) clearCochain();
+    else applyCochain(k, generators[cycled].cochain.values);
   };
+
+  const posLabel = pos === -1 ? "0" : `g${pos + 1}`;
   const clearLocal = () => {
+    setPos(-1);
+    setBasisCursor(-1);
     setCohomologyDegree(k);
     clearCochain();
   };
 
   return (
     <div className="h-chip-row">
-      {generators.length > 0 ? (
-        <button className="h-chip" onClick={() => load(safeIdx)} title="Load this generator into the editor">
-          H{sup(k)} = {hText}
-        </button>
-      ) : (
-        <span className="h-chip h-chip--inert">H{sup(k)} = {hText}</span>
-      )}
-      <span className="h-chip-meta">
-        {generators.length === 0
-          ? "no free generators"
-          : `${generators.length} generator${generators.length === 1 ? "" : "s"}`}
-      </span>
-      {generators.length > 0 && (
+      <span className="h-chip h-chip--inert">H{sup(k)} = {hText}</span>
+      {N > 0 ? (
         <span
           className={`h-chip-class ${coords === null ? "h-chip-class--none" : ""}`}
           title={coords === null
@@ -233,15 +228,19 @@ function CohomologyChip({ k }: { k: CohomologyDegree }) {
         >
           {coords === null ? "class = —" : `class = ${coordsText ?? "0"}`}
         </span>
+      ) : (
+        <span className="h-chip-meta">no free generators</span>
       )}
-      {generators.length > 0 && (
+      {N > 0 && (
         <span className="h-chip-nav">
-          <button onClick={() => load(safeIdx - 1)}>‹</button>
-          <span>g{safeIdx + 1} / {generators.length}</span>
-          <button onClick={() => load(safeIdx + 1)}>›</button>
+          <span className="h-chip-nav-label">set c{sup(k)} to:</span>
+          <button onClick={() => goto(pos - 1)} title="previous">‹</button>
+          <span className="h-chip-pos">{posLabel}</span>
+          <button onClick={() => goto(pos + 1)} title="next">›</button>
+          <span className="h-chip-meta">(basis: g1{N > 1 ? `, …, g${N}` : ""})</span>
         </span>
       )}
-      <button className="h-chip-clear" onClick={clearLocal}>Clear c{sup(k)}</button>
+      <button className="h-chip-clear" onClick={clearLocal} title={`Clear any manual values typed into c${sup(k)}`}>Clear c{sup(k)}</button>
     </div>
   );
 }
