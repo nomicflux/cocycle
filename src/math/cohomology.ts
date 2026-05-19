@@ -1,190 +1,191 @@
+// Cohomology of a chain complex with coefficients in a ring R.
+//
+// All three exports — cohomology, isCoboundary, classCoordinates — are
+// ring-agnostic: they ask the Ring for linear-algebra primitives and apply
+// UCT for the H^k(C; R) structure. Per-ring dispatch lives in makeRing.
+
 import type { Cochain, Nerve, Simplex, SimplexKey } from "../state/types";
 import { simplexKey } from "../state/types";
 import { coboundaryMatrix } from "./coboundary";
-import { matrixRank, smithNormalForm, SNF } from "./snf";
+import { smithNormalForm } from "./snf";
+import type { Ring, RingElement } from "./ring";
+import { ZRing } from "./ring";
 
 export type CocycleEntry = { cochain: Cochain; isCoboundary: boolean };
 
 export type CohomologyDim = {
-  rank: number;                  // free rank of H^k
-  torsion: number[];             // invariant factors > 1 (each gives Z/d)
-  cocycleBasis: CocycleEntry[];  // a Z-basis of ker(δ^k), annotated
+  rank: number;                  // R-free rank of H^k
+  torsion: number[];             // invariant-factor sizes (each ≥ 2)
+  cocycleBasis: CocycleEntry[];  // basis of ker(δ^k), annotated
 };
 
-function vectorToCochain(values: number[], simplices: Simplex[], degree: number): Cochain {
-  const map = new Map<SimplexKey, number>();
+function integerMatrixOverRing(M: number[][], ring: Ring): RingElement[][] {
+  return M.map((row) => row.map((v) => ring.fromInt(v)));
+}
+
+function mapToRingVector(
+  values: Map<SimplexKey, RingElement>,
+  simplices: Simplex[],
+  ring: Ring,
+): RingElement[] {
+  return simplices.map((s) => values.get(simplexKey(s)) ?? ring.zero);
+}
+
+function vectorToCochainRing(
+  values: RingElement[],
+  simplices: Simplex[],
+  degree: number,
+  ring: Ring,
+): Cochain {
+  const map = new Map<SimplexKey, RingElement>();
   simplices.forEach((s, i) => {
-    if (values[i] !== 0) map.set(simplexKey(s), values[i]);
+    if (!ring.isZero(values[i])) map.set(simplexKey(s), values[i]);
   });
   return { degree, values: map };
 }
 
-function diagOf(D: number[][]): number[] {
-  const r: number[] = [];
-  const n = Math.min(D.length, D[0]?.length ?? 0);
-  for (let i = 0; i < n; i++) r.push(D[i][i]);
-  return r;
-}
-
-function kernelBasis(M: number[][], nCols: number): number[][] {
-  if (M.length === 0 || M[0]?.length === 0 || nCols === 0) {
-    return Array.from({ length: nCols }, (_, j) => {
-      const v = new Array(nCols).fill(0);
-      v[j] = 1;
-      return v;
-    });
-  }
-  const snf = smithNormalForm(M);
-  const rk = snf.rank;
-  const basis: number[][] = [];
-  for (let j = rk; j < nCols; j++) {
-    basis.push(snf.V.map((row) => row[j]));
-  }
-  return basis;
-}
-
-function isInColumnSpan(b: number[], snf: SNF, m: number): boolean {
-  if (b.every((x) => x === 0)) return true;
-  const Ub = new Array(m).fill(0);
-  for (let i = 0; i < m; i++) {
-    let acc = 0;
-    for (let j = 0; j < m; j++) acc += snf.U[i][j] * b[j];
-    Ub[i] = acc;
-  }
-  const diag = diagOf(snf.D);
-  for (let i = 0; i < m; i++) {
-    const d = diag[i] ?? 0;
-    if (d === 0) { if (Ub[i] !== 0) return false; }
-    else if (Ub[i] % d !== 0) return false;
-  }
-  return true;
-}
-
-export function isCoboundary(values: Map<SimplexKey, number>, nerve: Nerve, k: number): boolean {
-  const simplicesK = nerve.byDim[k] ?? [];
-  if (simplicesK.length === 0) return true;
-  const b = simplicesK.map((s) => values.get(simplexKey(s)) ?? 0);
-  if (b.every((x) => x === 0)) return true;
-  if (k === 0) return false;
-  const Dkm1 = coboundaryMatrix(nerve, k - 1);
-  if (Dkm1.length === 0 || (Dkm1[0]?.length ?? 0) === 0) return false;
-  const snf = smithNormalForm(Dkm1);
-  return isInColumnSpan(b, snf, simplicesK.length);
-}
-
-function matVecMul(M: number[][], v: number[], rows: number, cols: number): number[] {
-  const out = new Array(rows).fill(0);
-  for (let i = 0; i < rows; i++) {
-    let acc = 0;
-    for (let j = 0; j < cols; j++) acc += M[i][j] * v[j];
-    out[i] = acc;
-  }
-  return out;
-}
-
-function solveLinearOverZ(A: number[][], c: number[]): number[] | null {
-  const m = A.length;
-  const n = A[0]?.length ?? 0;
-  if (m === 0) return c.length === 0 ? [] : null;
-  if (n === 0) return c.every((x) => x === 0) ? [] : null;
-  const snf = smithNormalForm(A);
-  const Uc = matVecMul(snf.U, c, m, m);
-  const y = new Array(n).fill(0);
-  const r = Math.min(m, n);
+// Rank and torsion factors of an integer matrix's SNF diagonal.
+function intSnfDiags(D: number[][]): { p: number; torsion: number[] } {
+  if (D.length === 0 || (D[0]?.length ?? 0) === 0) return { p: 0, torsion: [] };
+  const snf = smithNormalForm(D);
+  let p = 0;
+  const torsion: number[] = [];
+  const r = Math.min(snf.D.length, snf.D[0]?.length ?? 0);
   for (let i = 0; i < r; i++) {
     const d = snf.D[i][i];
-    if (d === 0) { if (Uc[i] !== 0) return null; }
-    else if (Uc[i] % d !== 0) return null;
-    else y[i] = Uc[i] / d;
+    if (d !== 0) {
+      p++;
+      if (Math.abs(d) > 1) torsion.push(Math.abs(d));
+    }
   }
-  for (let i = r; i < m; i++) if (Uc[i] !== 0) return null;
-  return matVecMul(snf.V, y, n, n);
+  return { p, torsion };
 }
 
-function buildClassMatrix(simplicesK: Simplex[], generators: CocycleEntry[], B: number[][], r: number, Nkm1: number): number[][] {
-  return simplicesK.map((s, i) => {
-    const row: number[] = [];
-    for (let j = 0; j < r; j++) row.push(generators[j].cochain.values.get(simplexKey(s)) ?? 0);
-    for (let j = 0; j < Nkm1; j++) row.push(B[i]?.[j] ?? 0);
-    return row;
-  });
+function isInColSpan(A: RingElement[][], b: RingElement[], ring: Ring): boolean {
+  if (A.length === 0 || (A[0]?.length ?? 0) === 0) {
+    return b.every((x) => ring.isZero(x));
+  }
+  return ring.solveLinearSystem(A, b) !== null;
 }
 
-export function classCoordinates(values: Map<SimplexKey, number>, nerve: Nerve, k: number): number[] | null {
-  const simplicesK = nerve.byDim[k] ?? [];
-  const Nk = simplicesK.length;
-  if (Nk === 0) return [];
-  const c = simplicesK.map((s) => values.get(simplexKey(s)) ?? 0);
-  const cohK = cohomology(nerve, k);
-  const generators = cohK.cocycleBasis.filter((cb) => !cb.isCoboundary);
-  const r = generators.length;
-  const Dkm1 = k > 0 ? coboundaryMatrix(nerve, k - 1) : [];
-  const Nkm1 = Dkm1[0]?.length ?? 0;
-  if (r === 0 && Nkm1 === 0) return c.every((x) => x === 0) ? [] : null;
-  const A = buildClassMatrix(simplicesK, generators, Dkm1, r, Nkm1);
-  const sol = solveLinearOverZ(A, c);
-  return sol === null ? null : sol.slice(0, r);
-}
-
-function colsToMatrix(cols: number[][], nRows: number): number[][] {
-  if (cols.length === 0 || nRows === 0) return [];
-  const M: number[][] = [];
-  for (let i = 0; i < nRows; i++) M.push(cols.map((c) => c[i] ?? 0));
-  return M;
-}
-
-function extractCols(M: number[][]): number[][] {
-  const cols: number[][] = [];
-  const n = M[0]?.length ?? 0;
-  for (let j = 0; j < n; j++) cols.push(M.map((row) => row[j] ?? 0));
-  return cols;
-}
-
-function pickFreeHkBasis(kerBasis: number[][], Dkm1: number[][], targetRank: number, Nk: number): number[][] {
-  if (targetRank === 0) return [];
-  const baseCols = Dkm1.length > 0 && (Dkm1[0]?.length ?? 0) > 0 ? extractCols(Dkm1) : [];
-  let currentRank = baseCols.length === 0 ? 0 : matrixRank(colsToMatrix(baseCols, Nk));
-  const out: number[][] = [];
+// Greedy pick of `rank` cocycles that are R-independent modulo im(D^{k-1}).
+// Augments the column matrix with each chosen v so subsequent picks are checked
+// against the growing span.
+function pickFreeBasis(
+  kerBasis: RingElement[][],
+  Dkm1: RingElement[][],
+  rank: number,
+  ring: Ring,
+): RingElement[][] {
+  if (rank === 0) return [];
+  const m = kerBasis[0]?.length ?? 0;
+  if (m === 0) return [];
+  const aug: RingElement[][] = Array.from({ length: m }, (_, i) =>
+    (Dkm1[i] ?? []).slice(),
+  );
+  const selected: RingElement[][] = [];
   for (const v of kerBasis) {
-    if (out.length >= targetRank) break;
-    const r = matrixRank(colsToMatrix([...baseCols, ...out, v], Nk));
-    if (r > currentRank) { out.push(v); currentRank = r; }
+    if (selected.length >= rank) break;
+    if (v.every((x) => ring.isZero(x))) continue;
+    if (isInColSpan(aug, v, ring)) continue;
+    selected.push(v);
+    for (let i = 0; i < m; i++) aug[i].push(v[i] ?? ring.zero);
   }
-  return out;
+  return selected;
 }
 
-export function cohomology(nerve: Nerve, k: number): CohomologyDim {
+export function cohomology(nerve: Nerve, k: number, ring: Ring = ZRing): CohomologyDim {
   const simplicesK = nerve.byDim[k] ?? [];
   const Nk = simplicesK.length;
   if (Nk === 0) return { rank: 0, torsion: [], cocycleBasis: [] };
 
-  const Dk = coboundaryMatrix(nerve, k);
-  const kerBasis = kernelBasis(Dk, Nk);
-  const kerDim = kerBasis.length;
+  const Dk_int = coboundaryMatrix(nerve, k);
+  const Dkm1_int = k > 0 ? coboundaryMatrix(nerve, k - 1) : [];
+  const snfPrev = intSnfDiags(Dkm1_int);
+  const snfThis = intSnfDiags(Dk_int);
+  // Integer H^k: free rank = Nk - rank(D^k) - rank(D^{k-1}); torsion comes
+  // from SNF(D^{k-1}). snfThis.torsion feeds UCT's Tor(H^{k+1}(Z), R) term.
+  const intHk = {
+    rank: Nk - snfThis.p - snfPrev.p,
+    torsion: snfPrev.torsion,
+  };
+  const { rank, torsion } = ring.applyUCT(intHk, snfThis.torsion);
 
-  let p = 0;
-  const torsion: number[] = [];
-  let snfPrev: SNF | null = null;
-  const Dkm1 = k > 0 ? coboundaryMatrix(nerve, k - 1) : [];
-  if (Dkm1.length > 0 && (Dkm1[0]?.length ?? 0) > 0) {
-    snfPrev = smithNormalForm(Dkm1);
-    const diagPrev = diagOf(snfPrev.D);
-    for (const d of diagPrev) {
-      if (d !== 0) { p++; if (Math.abs(d) > 1) torsion.push(Math.abs(d)); }
-    }
-  }
+  const Dk_R = integerMatrixOverRing(Dk_int, ring);
+  const Dkm1_R = integerMatrixOverRing(Dkm1_int, ring);
+  const kerBasis = ring.kernelBasis(Dk_R, Nk);
 
-  const freeRank = kerDim - p;
   const cocycleBasis: CocycleEntry[] =
-    freeRank > 0
-      ? pickFreeHkBasis(kerBasis, Dkm1, freeRank, Nk).map((v) => ({
-          cochain: vectorToCochain(v, simplicesK, k),
+    rank > 0
+      ? pickFreeBasis(kerBasis, Dkm1_R, rank, ring).map((v) => ({
+          cochain: vectorToCochainRing(v, simplicesK, k, ring),
           isCoboundary: false,
         }))
       : kerBasis.map((v) => ({
-          cochain: vectorToCochain(v, simplicesK, k),
-          isCoboundary: snfPrev !== null && isInColumnSpan(v, snfPrev, Nk),
+          cochain: vectorToCochainRing(v, simplicesK, k, ring),
+          isCoboundary: isInColSpan(Dkm1_R, v, ring),
         }));
 
-  return { rank: freeRank, torsion, cocycleBasis };
+  return { rank, torsion, cocycleBasis };
+}
+
+export function isCoboundary(
+  values: Map<SimplexKey, RingElement>,
+  nerve: Nerve,
+  k: number,
+  ring: Ring = ZRing,
+): boolean {
+  const simplicesK = nerve.byDim[k] ?? [];
+  if (simplicesK.length === 0) return true;
+  const c = mapToRingVector(values, simplicesK, ring);
+  if (c.every((x) => ring.isZero(x))) return true;
+  if (k === 0) return false;
+  const Dkm1_R = integerMatrixOverRing(coboundaryMatrix(nerve, k - 1), ring);
+  if (Dkm1_R.length === 0 || (Dkm1_R[0]?.length ?? 0) === 0) return false;
+  return ring.solveLinearSystem(Dkm1_R, c) !== null;
+}
+
+function buildClassMatrix(
+  simplicesK: Simplex[],
+  generators: CocycleEntry[],
+  B: RingElement[][],
+  r: number,
+  Nkm1: number,
+  ring: Ring,
+): RingElement[][] {
+  return simplicesK.map((s, i) => {
+    const row: RingElement[] = [];
+    for (let j = 0; j < r; j++) {
+      const v = generators[j].cochain.values.get(simplexKey(s));
+      row.push(v === undefined ? ring.zero : v);
+    }
+    for (let j = 0; j < Nkm1; j++) row.push(B[i]?.[j] ?? ring.zero);
+    return row;
+  });
+}
+
+export function classCoordinates(
+  values: Map<SimplexKey, RingElement>,
+  nerve: Nerve,
+  k: number,
+  ring: Ring = ZRing,
+): RingElement[] | null {
+  const simplicesK = nerve.byDim[k] ?? [];
+  const Nk = simplicesK.length;
+  if (Nk === 0) return [];
+  const c = mapToRingVector(values, simplicesK, ring);
+  const cohK = cohomology(nerve, k, ring);
+  const generators = cohK.cocycleBasis.filter((cb) => !cb.isCoboundary);
+  const r = generators.length;
+  const Dkm1_R = integerMatrixOverRing(
+    k > 0 ? coboundaryMatrix(nerve, k - 1) : [],
+    ring,
+  );
+  const Nkm1 = Dkm1_R[0]?.length ?? 0;
+  if (r === 0 && Nkm1 === 0) {
+    return c.every((x) => ring.isZero(x)) ? [] : null;
+  }
+  const A = buildClassMatrix(simplicesK, generators, Dkm1_R, r, Nkm1, ring);
+  const sol = ring.solveLinearSystem(A, c);
+  return sol === null ? null : sol.slice(0, r);
 }

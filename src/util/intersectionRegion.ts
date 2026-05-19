@@ -1,5 +1,6 @@
 import type { Disc, Space } from "../state/types";
-import { pointInDisc, spaceTranslates } from "../math/intersection";
+import { pairIntersects, pointInDisc, spaceTranslates, tripleIntersects } from "../math/intersection";
+import { deckApplyDisc, deckElements } from "../math/deck";
 
 function sampleCircle(d: Disc, n: number): Array<[number, number]> {
   const points: Array<[number, number]> = [];
@@ -57,17 +58,87 @@ function cartesian<T>(arrs: T[][]): T[][] {
   return out;
 }
 
+// Helly in R² for discs: k ≥ 3 convex sets have a common point iff every 3 do.
+function planarConvexNonEmpty(discs: Disc[]): boolean {
+  if (discs.length === 0) return false;
+  if (discs.length === 1) return true;
+  if (discs.length === 2) return pairIntersects(discs[0], discs[1]);
+  for (let i = 0; i < discs.length; i++) {
+    for (let j = i + 1; j < discs.length; j++) {
+      for (let k = j + 1; k < discs.length; k++) {
+        if (!tripleIntersects(discs[i], discs[j], discs[k])) return false;
+      }
+    }
+  }
+  return true;
+}
+
+// One polygon per cover-component of (d_1)_X ∩ … ∩ (d_k)_X. Anchor on the
+// smallest-radius disc (lifts are pairwise disjoint), enumerate lifts of the
+// others, union-find by 2k-disc Helly, and emit a single representative
+// polygon per UF component (the first-discovered constituent piece).
+// Wedge2 keeps its existing route — its non-deck-group gluing isn't a
+// DeckElem action and is left for a follow-up Topology instance.
 export function intersectionComponents(
   space: Space,
   simDiscs: Disc[],
 ): Array<Array<[number, number]>> {
   if (simDiscs.length === 0) return [];
   if (simDiscs.length === 1) return [intersectionPolygon(simDiscs)];
-  const base = simDiscs[0];
-  const restTranslates = simDiscs.slice(1).map((d) => spaceTranslates(d, space));
+  if (space === "wedge2") {
+    const base = simDiscs[0];
+    const restTranslates = simDiscs.slice(1).map((d) => spaceTranslates(d, space));
+    const out: Array<Array<[number, number]>> = [];
+    for (const combo of cartesian(restTranslates)) {
+      const poly = intersectionPolygon([base, ...combo]);
+      if (poly.length > 2) out.push(poly);
+    }
+    return out;
+  }
+
+  let anchorIdx = 0;
+  for (let i = 1; i < simDiscs.length; i++) {
+    if (simDiscs[i].r < simDiscs[anchorIdx].r) anchorIdx = i;
+  }
+  const elements = deckElements(space);
+  const others: Disc[] = [];
+  for (let i = 0; i < simDiscs.length; i++) if (i !== anchorIdx) others.push(simDiscs[i]);
+  const pieces: Disc[][] = [];
+  const stack: Disc[] = [simDiscs[anchorIdx]];
+  const recur = (depth: number): void => {
+    if (depth === others.length) {
+      pieces.push(stack.slice());
+      return;
+    }
+    for (const g of elements) {
+      const lifted = deckApplyDisc(g, others[depth]);
+      stack.push(lifted);
+      if (planarConvexNonEmpty(stack)) recur(depth + 1);
+      stack.pop();
+    }
+  };
+  recur(0);
+
+  const n = pieces.length;
+  if (n === 0) return [];
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (i: number): number =>
+    parent[i] === i ? i : (parent[i] = find(parent[i]));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (planarConvexNonEmpty([...pieces[i], ...pieces[j]])) {
+        const ri = find(i), rj = find(j);
+        if (ri !== rj) parent[ri] = rj;
+      }
+    }
+  }
+  const seenRoot = new Set<number>();
   const out: Array<Array<[number, number]>> = [];
-  for (const combo of cartesian(restTranslates)) {
-    const poly = intersectionPolygon([base, ...combo]);
+  for (let i = 0; i < n; i++) {
+    const r = find(i);
+    if (seenRoot.has(r)) continue;
+    seenRoot.add(r);
+    const poly = intersectionPolygon(pieces[i]);
     if (poly.length > 2) out.push(poly);
   }
   return out;

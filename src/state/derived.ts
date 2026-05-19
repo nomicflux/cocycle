@@ -12,6 +12,8 @@ import {
 } from "../math/intersection";
 import type { Cochain, Nerve, SimplexKey } from "./types";
 import { simplexKey } from "./types";
+import type { Ring, RingElement } from "../math/ring";
+import { ZRing, makeRing } from "../math/ring";
 import type { Feature } from "../tutorial/types";
 import { ALL_FEATURES } from "../tutorial/types";
 import { CHAPTERS, cumulativeUnlocks } from "../tutorial/chapters";
@@ -59,7 +61,8 @@ export function useComponents(): number[] {
 
 export function useCohomology(k: 0 | 1 | 2): CohomologyDim {
   const nerve = useNerve();
-  return useMemo(() => cohomology(nerve, k), [nerve, k]);
+  const ring = useRing();
+  return useMemo(() => cohomology(nerve, k, ring), [nerve, k, ring]);
 }
 
 export type CupPreview = {
@@ -82,6 +85,7 @@ export function useBasisCochain(): Cochain | null {
 
 export function useCupResult(): CupPreview | null {
   const nerve = useNerve();
+  const ring = useRing();
   const q = useStore((s) => s.cohomologyDegree);
   const currentValues = useStore((s) => s.cochainValues);
   const pickedDegree = useStore((s) => s.cupPickedDegree);
@@ -96,59 +100,68 @@ export function useCupResult(): CupPreview | null {
     const basis = gens[idx];
     const current: Cochain = { degree: q, values: currentValues };
     const result = basisOnLeft
-      ? cup(basis.cochain, current, nerve)
-      : cup(current, basis.cochain, nerve);
+      ? cup(basis.cochain, current, nerve, ring)
+      : cup(current, basis.cochain, nerve, ring);
     return {
       result,
       leftDegree: basisOnLeft ? pickedDegree : q,
       rightDegree: basisOnLeft ? q : pickedDegree,
     };
-  }, [nerve, q, currentValues, pickedDegree, pickedIndex, basisOnLeft, basisH]);
+  }, [nerve, ring, q, currentValues, pickedDegree, pickedIndex, basisOnLeft, basisH]);
 }
 
-export function useDeltaShadow(k: number): Map<SimplexKey, number> {
+export function useDeltaShadow(k: number): Map<SimplexKey, RingElement> {
   const nerve = useNerve();
+  const ring = useRing();
   const cochainValues = useStore((s) => s.cochainValues);
   return useMemo(() => {
     if (k <= 0) return new Map();
-    return applyCoboundary(cochainValues, nerve, k - 1);
-  }, [nerve, cochainValues, k]);
+    return applyCoboundary(cochainValues, nerve, k - 1, ring);
+  }, [nerve, ring, cochainValues, k]);
 }
 
 export function useIsCoboundary(k: number): boolean {
   const nerve = useNerve();
+  const ring = useRing();
   const cochainValues = useStore((s) => s.cochainValues);
   return useMemo(
-    () => isCoboundary(cochainValues, nerve, k),
-    [nerve, cochainValues, k],
+    () => isCoboundary(cochainValues, nerve, k, ring),
+    [nerve, ring, cochainValues, k],
   );
 }
 
-export function useClassCoordinates(k: 0 | 1 | 2): number[] | null {
+export function useClassCoordinates(k: 0 | 1 | 2): RingElement[] | null {
   const nerve = useNerve();
+  const ring = useRing();
   const cochainValues = useStore((s) => s.cochainValues);
   return useMemo(
-    () => classCoordinates(cochainValues, nerve, k),
-    [nerve, cochainValues, k],
+    () => classCoordinates(cochainValues, nerve, k, ring),
+    [nerve, ring, cochainValues, k],
   );
 }
 
 export function applyCoboundary(
-  values: Map<SimplexKey, number>,
+  values: Map<SimplexKey, RingElement>,
   nerve: Nerve,
   k: number,
-): Map<SimplexKey, number> {
-  const result = new Map<SimplexKey, number>();
+  ring: Ring = ZRing,
+): Map<SimplexKey, RingElement> {
+  const result = new Map<SimplexKey, RingElement>();
   const targets = nerve.byDim[k + 1] ?? [];
   for (const tau of targets) {
-    let acc = 0;
+    let acc: RingElement = ring.zero;
     for (const { face, sign } of faces(tau)) {
-      const v = values.get(simplexKey(face)) ?? 0;
-      acc += sign * v;
+      const v = values.get(simplexKey(face)) ?? ring.zero;
+      acc = ring.add(acc, ring.mul(ring.fromInt(sign), v));
     }
-    if (acc !== 0) result.set(simplexKey(tau), acc);
+    if (!ring.isZero(acc)) result.set(simplexKey(tau), acc);
   }
   return result;
+}
+
+export function useRing(): Ring {
+  const spec = useStore((s) => s.ring);
+  return useMemo(() => makeRing(spec), [spec]);
 }
 
 export function useUnlocked(): Set<Feature> {
@@ -171,7 +184,10 @@ export function useGoalReached(): boolean {
   const showArrows = useStore((s) => s.showArrows);
   const showCupProduct = useStore((s) => s.showCupProduct);
   const cupPickedIndex = useStore((s) => s.cupPickedIndex);
+  const cupPickedDegree = useStore((s) => s.cupPickedDegree);
+  const space = useStore((s) => s.space);
   const nerve = useNerve();
+  const ring = useRing();
   return useMemo(() => {
     if (mode !== "tutorial") return false;
     const chap = CHAPTERS[step];
@@ -186,9 +202,13 @@ export function useGoalReached(): boolean {
       showArrows,
       showCupProduct,
       cupPickedIndex,
+      cupPickedDegree,
+      space,
+      ring,
     });
   }, [
     mode, step, discs, nerve, cochainValues, cohomologyDegree,
     selectedSimplex, basisCursor, showArrows, showCupProduct, cupPickedIndex,
+    cupPickedDegree, space, ring,
   ]);
 }

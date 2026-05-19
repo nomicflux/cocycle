@@ -2,9 +2,12 @@ import { useRef, useState } from "react";
 import type { Disc, Simplex, Space } from "../state/types";
 import { simplexKey } from "../state/types";
 import { useStore } from "../state/store";
-import { useNerve, useBasisCochain, useCupResult } from "../state/derived";
+import { useNerve, useBasisCochain, useCupResult, useRing } from "../state/derived";
+import type { Ring, RingElement } from "../math/ring";
+import { signedFormat, zToInt } from "../math/ring";
 import { intersectionCentroid, intersectionComponents } from "../util/intersectionRegion";
-import { TORUS_PERIOD, spaceTranslates } from "../math/intersection";
+import { spaceTranslates } from "../math/intersection";
+import { deckElements } from "../math/deck";
 
 const COMPONENT_COLORS: Array<[string, string]> = [
   ["#facc15", "#a16207"],
@@ -15,27 +18,28 @@ const COMPONENT_COLORS: Array<[string, string]> = [
   ["#f97316", "#9a3412"],
 ];
 
+// Render the deck-orbit of a cover-component polygon in the viewing window.
+// Each deck element g ∈ Γ acts on a vertex (x, y) as (g.sx·x + g.tx,
+// g.sy·y + g.ty); applying it to every vertex of the canonical polygon
+// gives that polygon's image at the Γ-translate. Wedge2 has no R²-acting
+// deck group; its intersection polygons come out of `intersectionComponents`
+// already enumerated over chart-translates, so no further multiplication.
 function polygonLatticeRenders(
   poly: Array<[number, number]>,
   space: Space,
 ): Array<Array<[number, number]>> {
-  if (space === "planar") return [poly];
-  const xs = poly.map((p) => p[0]);
-  const ys = poly.map((p) => p[1]);
-  const minX = Math.min(...xs), maxX = Math.max(...xs);
-  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  if (space === "planar" || space === "wedge2") return [poly];
   const out: Array<Array<[number, number]>> = [];
-  for (let kx = -1; kx <= 1; kx++) {
-    for (let ky = -1; ky <= 1; ky++) {
-      const dx = kx * TORUS_PERIOD;
-      const dy = ky * TORUS_PERIOD;
-      if (
-        maxX + dx >= MATH_MIN && minX + dx <= MATH_MAX &&
-        maxY + dy >= MATH_MIN && minY + dy <= MATH_MAX
-      ) {
-        out.push(poly.map(([x, y]) => [x + dx, y + dy] as [number, number]));
-      }
-    }
+  for (const g of deckElements(space)) {
+    const transformed = poly.map(
+      ([x, y]) => [g.sx * x + g.tx, g.sy * y + g.ty] as [number, number],
+    );
+    const xs = transformed.map((p) => p[0]);
+    const ys = transformed.map((p) => p[1]);
+    const inBox =
+      Math.max(...xs) >= MATH_MIN && Math.min(...xs) <= MATH_MAX &&
+      Math.max(...ys) >= MATH_MIN && Math.min(...ys) <= MATH_MAX;
+    if (inBox) out.push(transformed);
   }
   return out;
 }
@@ -78,22 +82,25 @@ function pointFromEvent(e: React.PointerEvent, svg: SVGSVGElement): [number, num
 type CochainOverlayProps = {
   discs: Disc[];
   simplices: Simplex[];
-  values: Map<string, number>;
+  values: Map<string, RingElement>;
   degree: number;
   color: string;
   layer: number;
+  ring: Ring;
   toSvgX: (x: number) => number;
   toSvgY: (y: number) => number;
 };
 
 function CochainOverlay({
-  discs, simplices, values, degree, color, layer, toSvgX, toSvgY,
+  discs, simplices, values, degree, color, layer, ring, toSvgX, toSvgY,
 }: CochainOverlayProps) {
   return (
     <g pointerEvents="none">
       {simplices.map((s) => {
-        const v = values.get(simplexKey(s)) ?? 0;
-        if (v === 0) return null;
+        const elem = values.get(simplexKey(s));
+        if (elem === undefined || ring.isZero(elem)) return null;
+        const v = zToInt(elem);
+        const label = signedFormat(ring, elem);
         if (degree === 0) {
           const d = discs[s[0]];
           if (!d) return null;
@@ -106,7 +113,7 @@ function CochainOverlay({
                 fill={color} fillOpacity={0.85} stroke="#fff" strokeWidth={1.5} />
               <text x={cx + offset} y={cy - 26} textAnchor="middle" dy="0.32em"
                 fontSize="11" fontFamily="ui-monospace, monospace" fill="#fff">
-                {v > 0 ? `+${v}` : `${v}`}
+                {label}
               </text>
             </g>
           );
@@ -150,7 +157,7 @@ function CochainOverlay({
                 <text x={mx + 14 * wx} y={my + 14 * wy} textAnchor="middle" dy="0.32em"
                   fontSize="11" fontFamily="ui-monospace, monospace"
                   fill={color} stroke="#fff" strokeWidth={3} paintOrder="stroke">
-                  {v > 0 ? `+${v}` : `${v}`}
+                  {label}
                 </text>
               )}
             </g>
@@ -170,7 +177,7 @@ function CochainOverlay({
                 fill={color} fillOpacity={0.9} stroke="#fff" strokeWidth={2} />
               <text x={cx} y={cy} textAnchor="middle" dy="0.32em"
                 fontSize="10" fontFamily="ui-monospace, monospace" fill="#fff">
-                {v > 0 ? `+${v}` : `${v}`}
+                {label}
               </text>
             </g>
           );
@@ -208,6 +215,7 @@ export default function DrawingPanel() {
   const cohomologyDegree = useStore((s) => s.cohomologyDegree);
   const cochainValues = useStore((s) => s.cochainValues);
   const nerve = useNerve();
+  const ring = useRing();
   const basisCochain = useBasisCochain();
   const cupPreview = useCupResult();
   const svgRef = useRef<SVGSVGElement>(null);
@@ -271,6 +279,7 @@ export default function DrawingPanel() {
               <option value="torus">Torus</option>
               <option value="klein">Klein bottle</option>
               <option value="projective">Projective (RP²)</option>
+              <option value="wedge2">Wedge S²∨S¹∨S¹</option>
             </select>
           </label>
         </div>
@@ -292,17 +301,44 @@ export default function DrawingPanel() {
           ))}
         </defs>
         <rect width={SVG_SIZE} height={SVG_SIZE} fill="#fafafa" />
-        {hasQuotient && (
+        {hasQuotient && space !== "wedge2" && (
           <rect
             x={0} y={0} width={SVG_SIZE} height={SVG_SIZE}
             fill="none" stroke="#64748b" strokeWidth={2}
             strokeDasharray="8 6" pointerEvents="none"
           />
         )}
+        {space === "wedge2" && (
+          <g pointerEvents="none">
+            <line x1={toSvgX(-2)} y1={0} x2={toSvgX(-2)} y2={SVG_SIZE}
+              stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="6 4" />
+            <line x1={toSvgX(2)} y1={0} x2={toSvgX(2)} y2={SVG_SIZE}
+              stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="6 4" />
+            <circle cx={toSvgX(0)} cy={toSvgY(3)} r={toSvgScale(3)}
+              fill="none" stroke="#94a3b8" strokeWidth={1.5} strokeDasharray="6 4" />
+            <circle cx={toSvgX(0)} cy={toSvgY(-3)} r={toSvgScale(0.8)}
+              fill="none" stroke="#475569" strokeWidth={1.5} strokeDasharray="3 3" />
+            <text x={toSvgX(-4)} y={toSvgY(-5.2)} textAnchor="middle"
+              fontSize="14" fontFamily="ui-sans-serif, system-ui"
+              fill="#475569" stroke="#fff" strokeWidth={3} paintOrder="stroke">S¹</text>
+            <text x={toSvgX(0)} y={toSvgY(5.5)} textAnchor="middle"
+              fontSize="14" fontFamily="ui-sans-serif, system-ui"
+              fill="#475569" stroke="#fff" strokeWidth={3} paintOrder="stroke">S²</text>
+            <text x={toSvgX(4)} y={toSvgY(-5.2)} textAnchor="middle"
+              fontSize="14" fontFamily="ui-sans-serif, system-ui"
+              fill="#475569" stroke="#fff" strokeWidth={3} paintOrder="stroke">S¹</text>
+            <text x={toSvgX(0)} y={toSvgY(-3) + 4} textAnchor="middle"
+              fontSize="10" fontFamily="ui-sans-serif, system-ui"
+              fill="#64748b" stroke="#fff" strokeWidth={2} paintOrder="stroke">basepoint</text>
+          </g>
+        )}
         {renderOrder.map((i) => {
           const d = discs[i];
           const stroke = darken(d.color);
           const ghosts = ghostsFor(d, space);
+          const isBasepoint = d.region === "basepoint";
+          const discStroke = isBasepoint ? "#0f172a" : stroke;
+          const discStrokeWidth = isBasepoint ? 3 : 1.5;
           return (
             <g key={d.id}>
               {ghosts.map((g, gi) => (
@@ -317,7 +353,7 @@ export default function DrawingPanel() {
               ))}
               <circle
                 cx={toSvgX(d.cx)} cy={toSvgY(d.cy)} r={toSvgScale(d.r)}
-                fill={d.color} fillOpacity={0.55} stroke={stroke} strokeWidth={1.5}
+                fill={d.color} fillOpacity={0.55} stroke={discStroke} strokeWidth={discStrokeWidth}
                 onPointerDown={(e) => onDiscPointerDown(e, d, i)}
                 style={{ cursor: "grab" }}
               />
@@ -401,6 +437,7 @@ export default function DrawingPanel() {
             values={cochainValues}
             degree={cohomologyDegree}
             color={CUR_COLOR} layer={0}
+            ring={ring}
             toSvgX={toSvgX} toSvgY={toSvgY}
           />
         )}
@@ -411,6 +448,7 @@ export default function DrawingPanel() {
             values={basisCochain.values}
             degree={basisCochain.degree}
             color={BASIS_COLOR} layer={1}
+            ring={ring}
             toSvgX={toSvgX} toSvgY={toSvgY}
           />
         )}
@@ -421,6 +459,7 @@ export default function DrawingPanel() {
             values={cupPreview.result.values}
             degree={cupPreview.result.degree}
             color={CUP_COLOR} layer={2}
+            ring={ring}
             toSvgX={toSvgX} toSvgY={toSvgY}
           />
         )}

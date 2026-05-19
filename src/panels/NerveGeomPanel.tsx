@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { useStore } from "../state/store";
-import { useNerve, useCupResult, applyCoboundary } from "../state/derived";
+import { useNerve, useCupResult, useRing, applyCoboundary } from "../state/derived";
 import type { Simplex } from "../state/types";
 import { simplexKey } from "../state/types";
+import type { RingElement } from "../math/ring";
+import { zToInt } from "../math/ring";
 
 const CUP_COLOR = "#7c3aed";
 const FRONT_COLOR = "#06b6d4";
@@ -184,17 +186,18 @@ export default function NerveGeomPanel() {
   const cupPreview = showCupProduct ? cupPreviewRaw : null;
   const [hovered, setHovered] = useState<Simplex | null>(null);
 
+  const ring = useRing();
   const n = nerve.byDim[0]?.length ?? 0;
   const positions = Array.from({ length: n }, (_, i) => vertexPos(i, n));
-  const delta = applyCoboundary(cochainValues, nerve, k);
+  const delta = applyCoboundary(cochainValues, nerve, k, ring);
   const hasNontrivialDelta = delta.size > 0;
 
   const toggle = (s: Simplex) => selectSimplex(same(selectedSimplex, s) ? null : s);
   const failing = (s: Simplex): boolean => delta.has(simplexKey(s));
-  const cVal = (s: Simplex): number => cochainValues.get(simplexKey(s)) ?? 0;
-  const dVal = (s: Simplex): number => delta.get(simplexKey(s)) ?? 0;
-  const cupVal = (s: Simplex): number =>
-    cupPreview?.result.values.get(simplexKey(s)) ?? 0;
+  const cVal = (s: Simplex): RingElement => cochainValues.get(simplexKey(s)) ?? ring.zero;
+  const dVal = (s: Simplex): RingElement => delta.get(simplexKey(s)) ?? ring.zero;
+  const cupVal = (s: Simplex): RingElement =>
+    cupPreview?.result.values.get(simplexKey(s)) ?? ring.zero;
 
   const cupResultDim = cupPreview?.result.degree ?? -1;
   const hoverIsCupSimplex =
@@ -312,40 +315,40 @@ export default function NerveGeomPanel() {
 
         {showLabels && k === 0 && (nerve.byDim[0] ?? []).map((s) => {
           const v = cVal(s);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           const [px, py] = positions[s[0]];
-          return <ValueBadge key={`v-${simplexKey(s)}`} x={px + 30} y={py - 16} value={v} />;
+          return <ValueBadge key={`v-${simplexKey(s)}`} x={px + 30} y={py - 16} value={zToInt(v)} />;
         })}
         {showLabels && k === 1 && (nerve.byDim[1] ?? []).map((e) => {
           const v = cVal(e);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           const [mx, my] = midpoint(positions[e[0]], positions[e[1]]);
-          return <ValueBadge key={`v-${simplexKey(e)}`} x={mx} y={my - 20} value={v} />;
+          return <ValueBadge key={`v-${simplexKey(e)}`} x={mx} y={my - 20} value={zToInt(v)} />;
         })}
         {showLabels && k === 2 && (nerve.byDim[2] ?? []).map((t) => {
           const v = cVal(t);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           const [cx, cy] = centroid(t.map((i) => positions[i]));
-          return <ValueBadge key={`v-${simplexKey(t)}`} x={cx} y={cy - 30} value={v} />;
+          return <ValueBadge key={`v-${simplexKey(t)}`} x={cx} y={cy - 30} value={zToInt(v)} />;
         })}
 
         {showLabels && k === 0 && (nerve.byDim[1] ?? []).map((e) => {
           const v = dVal(e);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           const [mx, my] = midpoint(positions[e[0]], positions[e[1]]);
-          return <ValueBadge key={`d-${simplexKey(e)}`} x={mx} y={my - 20} value={v} />;
+          return <ValueBadge key={`d-${simplexKey(e)}`} x={mx} y={my - 20} value={zToInt(v)} />;
         })}
         {showLabels && k === 1 && (nerve.byDim[2] ?? []).map((t) => {
           const v = dVal(t);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           const [cx, cy] = centroid(t.map((i) => positions[i]));
-          return <ValueBadge key={`d-${simplexKey(t)}`} x={cx} y={cy - 30} value={v} />;
+          return <ValueBadge key={`d-${simplexKey(t)}`} x={cx} y={cy - 30} value={zToInt(v)} />;
         })}
         {showLabels && k === 2 && (nerve.byDim[3] ?? []).map((t) => {
           const v = dVal(t);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           const [tx, ty] = centroid(t.map((i) => positions[i]));
-          return <ValueBadge key={`d-${simplexKey(t)}`} x={tx + 60} y={ty} value={v} />;
+          return <ValueBadge key={`d-${simplexKey(t)}`} x={tx + 60} y={ty} value={zToInt(v)} />;
         })}
 
         {showLabels && hasNontrivialDelta && k === 0 && (nerve.byDim[2] ?? []).map((t) => {
@@ -359,7 +362,7 @@ export default function NerveGeomPanel() {
 
         {cupPreview && (nerve.byDim[cupResultDim] ?? []).map((s) => {
           const v = cupVal(s);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           return (
             <FaceOverlay key={`cup-${simplexKey(s)}`} face={s}
               positions={positions} color={CUP_COLOR} k={`cup-${simplexKey(s)}`} />
@@ -385,21 +388,21 @@ export default function NerveGeomPanel() {
 
         {showLabels && cupPreview && cupResultDim === 0 && (nerve.byDim[0] ?? []).map((s) => {
           const v = cupVal(s);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           const [px, py] = positions[s[0]];
-          return <ValueBadge key={`cv-${simplexKey(s)}`} x={px - 30} y={py + 22} value={v} />;
+          return <ValueBadge key={`cv-${simplexKey(s)}`} x={px - 30} y={py + 22} value={zToInt(v)} />;
         })}
         {showLabels && cupPreview && cupResultDim === 1 && (nerve.byDim[1] ?? []).map((e) => {
           const v = cupVal(e);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           const [mx, my] = midpoint(positions[e[0]], positions[e[1]]);
-          return <ValueBadge key={`cv-${simplexKey(e)}`} x={mx} y={my + 20} value={v} />;
+          return <ValueBadge key={`cv-${simplexKey(e)}`} x={mx} y={my + 20} value={zToInt(v)} />;
         })}
         {showLabels && cupPreview && cupResultDim === 2 && (nerve.byDim[2] ?? []).map((t) => {
           const v = cupVal(t);
-          if (v === 0) return null;
+          if (ring.isZero(v)) return null;
           const [cx, cy] = centroid(t.map((i) => positions[i]));
-          return <ValueBadge key={`cv-${simplexKey(t)}`} x={cx} y={cy + 28} value={v} />;
+          return <ValueBadge key={`cv-${simplexKey(t)}`} x={cx} y={cy + 28} value={zToInt(v)} />;
         })}
       </svg>
     </div>

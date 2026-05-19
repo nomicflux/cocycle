@@ -2,9 +2,9 @@ import { describe, it, expect } from "vitest";
 import type { Disc } from "../src/state/types";
 import {
   pairIntersects,
-  pairIntersectsTorus,
-  tripleIntersectsTorus,
-  quadIntersectsTorus,
+  pairIntersectsOn,
+  tripleIntersectsOn,
+  quadIntersectsOn,
   TORUS_PERIOD,
 } from "../src/math/intersection";
 import { buildNerve } from "../src/math/nerve";
@@ -27,16 +27,16 @@ describe("pairIntersectsTorus", () => {
     const a = D(-5, 0, 2.5);
     const b = D(5, 0, 2.5);
     expect(pairIntersects(a, b)).toBe(false);
-    expect(pairIntersectsTorus(a, b)).toBe(true);
+    expect(pairIntersectsOn("torus",a, b)).toBe(true);
   });
   it("returns false for small far-apart discs", () => {
-    expect(pairIntersectsTorus(D(-3, 0, 1), D(3, 0, 1))).toBe(false);
+    expect(pairIntersectsOn("torus",D(-3, 0, 1), D(3, 0, 1))).toBe(false);
   });
   it("returns true when planar intersection already exists", () => {
-    expect(pairIntersectsTorus(D(0, 0, 1), D(1, 0, 1))).toBe(true);
+    expect(pairIntersectsOn("torus",D(0, 0, 1), D(1, 0, 1))).toBe(true);
   });
   it("returns true for diagonal corner wraparound", () => {
-    expect(pairIntersectsTorus(D(-5.5, -5.5, 1.5), D(5.5, 5.5, 1.5))).toBe(true);
+    expect(pairIntersectsOn("torus",D(-5.5, -5.5, 1.5), D(5.5, 5.5, 1.5))).toBe(true);
   });
 });
 
@@ -45,11 +45,11 @@ describe("tripleIntersectsTorus", () => {
     const a = D(-5.5, -5.5, 1.5);
     const b = D(5.5, -5.5, 1.5);
     const c = D(5.5, 5.5, 1.5);
-    expect(tripleIntersectsTorus(a, b, c)).toBe(true);
+    expect(tripleIntersectsOn("torus",a, b, c)).toBe(true);
   });
   it("returns false when a pair doesn't intersect even on the torus", () => {
     expect(
-      tripleIntersectsTorus(D(-3, 0, 1), D(3, 0, 1), D(0, 0, 1)),
+      tripleIntersectsOn("torus",D(-3, 0, 1), D(3, 0, 1), D(0, 0, 1)),
     ).toBe(false);
   });
 });
@@ -57,7 +57,7 @@ describe("tripleIntersectsTorus", () => {
 describe("quadIntersectsTorus", () => {
   it("returns true when four corners all meet the identified corner via wrap", () => {
     expect(
-      quadIntersectsTorus(
+      quadIntersectsOn("torus",
         D(-5.5, -5.5, 1.5),
         D(5.5, -5.5, 1.5),
         D(-5.5, 5.5, 1.5),
@@ -67,7 +67,7 @@ describe("quadIntersectsTorus", () => {
   });
   it("returns false when no torus point is in all four discs", () => {
     expect(
-      quadIntersectsTorus(
+      quadIntersectsOn("torus",
         D(-3, 0, 1),
         D(0, -3, 1),
         D(3, 0, 1),

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useStore } from "../state/store";
 import {
   useNerve,
@@ -8,26 +8,240 @@ import {
   useDeltaShadow,
   useIsCoboundary,
   useClassCoordinates,
+  useRing,
   applyCoboundary,
 } from "../state/derived";
 import type { Simplex, SimplexKey } from "../state/types";
 import { simplexKey } from "../state/types";
 import { faces } from "../math/coboundary";
+import type { Ring, RingElement, RingSpec } from "../math/ring";
 import type { CohomologyDegree } from "../state/store";
 
 const SUPS = ["⁰", "¹", "²", "³"];
 function sup(n: number): string { return SUPS[n] ?? String(n); }
 
-function formatGroup(rank: number, torsion: number[]): string {
+function ringSymbol(spec: RingSpec): { name: string; needsParens: boolean } {
+  switch (spec.kind) {
+    case "Z":  return { name: "ℤ",        needsParens: false };
+    case "Zp": return { name: `ℤ/${spec.p}`, needsParens: true };
+    case "Q":  return { name: "ℚ",        needsParens: false };
+    case "Zi": return { name: "ℤ[i]",     needsParens: false };
+    case "Zw": return { name: "ℤ[ω]",     needsParens: false };
+  }
+}
+
+function formatGroup(rank: number, torsion: number[], spec: RingSpec): string {
+  const { name, needsParens } = ringSymbol(spec);
   const parts: string[] = [];
-  if (rank > 0) parts.push(rank === 1 ? "ℤ" : `ℤ^${rank}`);
-  for (const t of torsion) parts.push(`ℤ/${t}`);
+  if (rank > 0) {
+    parts.push(
+      rank === 1 ? name : needsParens ? `(${name})^${rank}` : `${name}^${rank}`,
+    );
+  }
+  for (const t of torsion) parts.push(`${name}/${t}`);
   return parts.length ? parts.join(" ⊕ ") : "0";
 }
 
-function parseInt0(s: string): number {
-  const v = parseInt(s, 10);
-  return isNaN(v) ? 0 : v;
+function termFormat(ring: Ring, x: RingElement, leading: boolean): string {
+  if (leading) return ring.format(x);
+  const isNeg = ring.isPositive(ring.neg(x));
+  const mag = isNeg ? ring.neg(x) : x;
+  return `${isNeg ? "− " : "+ "}${ring.format(mag)}`;
+}
+
+function ringSpecKey(spec: RingSpec): string {
+  return spec.kind === "Zp" ? `Zp:${spec.p}` : spec.kind;
+}
+
+function keyToRingSpec(key: string): RingSpec {
+  if (key.startsWith("Zp:")) return { kind: "Zp", p: parseInt(key.slice(3), 10) };
+  if (key === "Z" || key === "Q" || key === "Zi" || key === "Zw") return { kind: key };
+  return { kind: "Z" };
+}
+
+function RingPicker() {
+  const ring = useStore((s) => s.ring);
+  const setRing = useStore((s) => s.setRing);
+  return (
+    <label className="ring-picker">
+      Coefficients:
+      <select
+        value={ringSpecKey(ring)}
+        onChange={(e) => setRing(keyToRingSpec(e.target.value))}
+      >
+        <option value="Z">ℤ</option>
+        <option value="Zp:2">ℤ/2</option>
+        <option value="Zp:3">ℤ/3</option>
+        <option value="Zp:4">ℤ/4</option>
+        <option value="Zp:5">ℤ/5</option>
+        <option value="Zp:6">ℤ/6</option>
+        <option value="Zp:7">ℤ/7</option>
+        <option value="Zp:8">ℤ/8</option>
+        <option value="Zp:9">ℤ/9</option>
+        <option value="Zp:12">ℤ/12</option>
+        <option value="Q">ℚ</option>
+        <option value="Zi">ℤ[i]</option>
+        <option value="Zw">ℤ[ω]</option>
+      </select>
+    </label>
+  );
+}
+
+function CochainInput({
+  value, ring, onCommit,
+}: { value: RingElement; ring: Ring; onCommit: (v: RingElement) => void }) {
+  const shape = ring.inputShape();
+  switch (shape.kind) {
+    case "integer":
+      return <IntegerInput value={value} ring={ring} onCommit={onCommit} />;
+    case "fraction":
+      return <FractionInput value={value} ring={ring} onCommit={onCommit} />;
+    case "mod-cycle":
+      return <ModCycleInput value={value} p={shape.p} ring={ring} onCommit={onCommit} />;
+    case "complex":
+      return <ComplexInput value={value} imagSymbol={shape.imagSymbol} onCommit={onCommit} />;
+  }
+}
+
+function IntegerInput({
+  value, ring, onCommit,
+}: { value: RingElement; ring: Ring; onCommit: (v: RingElement) => void }) {
+  const [text, setText] = useState(String(value[0]));
+  const lastSynced = useRef(String(value[0]));
+  useEffect(() => {
+    const s = String(value[0]);
+    if (s !== lastSynced.current) {
+      setText(s);
+      lastSynced.current = s;
+    }
+  }, [value]);
+  return (
+    <input
+      className="cochain-input cochain-input--integer"
+      type="number"
+      inputMode="numeric"
+      value={text}
+      onChange={(e) => {
+        const next = e.target.value;
+        setText(next);
+        if (next === "" || next === "-") {
+          onCommit(ring.fromInt(0));
+          lastSynced.current = "0";
+          return;
+        }
+        const v = parseInt(next, 10);
+        if (Number.isFinite(v)) {
+          onCommit(ring.fromInt(v));
+          lastSynced.current = String(v);
+        }
+      }}
+    />
+  );
+}
+
+function FractionInput({
+  value, ring, onCommit,
+}: { value: RingElement; ring: Ring; onCommit: (v: RingElement) => void }) {
+  const [num, den] = value;
+  const [numText, setNumText] = useState(String(num));
+  const [denText, setDenText] = useState(String(den));
+  const lastSynced = useRef({ num: String(num), den: String(den) });
+  useEffect(() => {
+    const ns = String(num), ds = String(den);
+    if (ns !== lastSynced.current.num || ds !== lastSynced.current.den) {
+      setNumText(ns); setDenText(ds);
+      lastSynced.current = { num: ns, den: ds };
+    }
+  }, [num, den]);
+  const tryCommit = (nStr: string, dStr: string) => {
+    const n = nStr === "" || nStr === "-" ? 0 : parseInt(nStr, 10);
+    const d = dStr === "" ? 1 : parseInt(dStr, 10);
+    if (!Number.isFinite(n) || !Number.isFinite(d) || d < 1) return;
+    const parsed = ring.parse(`${n}/${d}`);
+    if (parsed !== null) {
+      onCommit(parsed);
+      lastSynced.current = { num: String(parsed[0]), den: String(parsed[1]) };
+    }
+  };
+  const snapOnBlur = () => {
+    let n = numText === "" || numText === "-" ? 0 : parseInt(numText, 10);
+    let d = denText === "" ? 1 : parseInt(denText, 10);
+    if (!Number.isFinite(n)) n = 0;
+    if (!Number.isFinite(d) || d < 1) d = 1;
+    const parsed = ring.parse(`${n}/${d}`);
+    if (parsed === null) return;
+    setNumText(String(parsed[0]));
+    setDenText(String(parsed[1]));
+    onCommit(parsed);
+    lastSynced.current = { num: String(parsed[0]), den: String(parsed[1]) };
+  };
+  return (
+    <span className="cochain-input cochain-input--fraction">
+      <input
+        type="number" inputMode="numeric" value={numText}
+        onChange={(e) => { setNumText(e.target.value); tryCommit(e.target.value, denText); }}
+        onBlur={snapOnBlur}
+      />
+      <span className="fraction-bar">/</span>
+      <input
+        type="number" inputMode="numeric" min="1" value={denText}
+        onChange={(e) => { setDenText(e.target.value); tryCommit(numText, e.target.value); }}
+        onBlur={snapOnBlur}
+      />
+    </span>
+  );
+}
+
+function ModCycleInput({
+  value, p, ring, onCommit,
+}: { value: RingElement; p: number; ring: Ring; onCommit: (v: RingElement) => void }) {
+  const v = value[0];
+  const goPrev = () => onCommit(ring.fromInt((v - 1 + p) % p));
+  const goNext = () => onCommit(ring.fromInt((v + 1) % p));
+  return (
+    <span className="cochain-input cochain-input--mod-cycle">
+      <button type="button" onClick={goPrev} title="previous">◀</button>
+      <span className="mod-cycle-value">{v}</span>
+      <button type="button" onClick={goNext} title="next">▶</button>
+    </span>
+  );
+}
+
+function ComplexInput({
+  value, imagSymbol, onCommit,
+}: { value: RingElement; imagSymbol: "i" | "ω"; onCommit: (v: RingElement) => void }) {
+  const [a, b] = value;
+  const [aText, setAText] = useState(String(a));
+  const [bText, setBText] = useState(String(b));
+  const lastSynced = useRef({ a: String(a), b: String(b) });
+  useEffect(() => {
+    const as = String(a), bs = String(b);
+    if (as !== lastSynced.current.a || bs !== lastSynced.current.b) {
+      setAText(as); setBText(bs);
+      lastSynced.current = { a: as, b: bs };
+    }
+  }, [a, b]);
+  const commit = (aStr: string, bStr: string) => {
+    const an = aStr === "" || aStr === "-" ? 0 : parseInt(aStr, 10);
+    const bn = bStr === "" || bStr === "-" ? 0 : parseInt(bStr, 10);
+    if (!Number.isFinite(an) || !Number.isFinite(bn)) return;
+    onCommit([an, bn]);
+    lastSynced.current = { a: String(an), b: String(bn) };
+  };
+  return (
+    <span className="cochain-input cochain-input--complex">
+      <input
+        type="number" inputMode="numeric" value={aText}
+        onChange={(e) => { setAText(e.target.value); commit(e.target.value, bText); }}
+      />
+      <span className="complex-plus"> + </span>
+      <input
+        type="number" inputMode="numeric" value={bText}
+        onChange={(e) => { setBText(e.target.value); commit(aText, e.target.value); }}
+      />
+      <span className="complex-imag-sym">{imagSymbol}</span>
+    </span>
+  );
 }
 
 type PairLeft = 0 | 1;
@@ -60,17 +274,16 @@ function FaceTerm({ sign, face, leading, onClick }: {
   );
 }
 
-function ValueTerm({ sign, value, leading }: { sign: number; value: number; leading: boolean }) {
-  if (leading) {
-    return <span className="delta-eq-num">{sign * value}</span>;
-  }
-  const product = sign * value;
-  const op = product >= 0 ? "+ " : "− ";
-  return <span className="delta-eq-num">{op}{Math.abs(product)}</span>;
+function ValueTerm({
+  sign, value, leading, ring,
+}: { sign: number; value: RingElement; leading: boolean; ring: Ring }) {
+  const product = ring.mul(ring.fromInt(sign), value);
+  return <span className="delta-eq-num">{termFormat(ring, product, leading)}</span>;
 }
 
 function DeltaEquationRows({ fromK }: { fromK: number }) {
   const nerve = useNerve();
+  const ring = useRing();
   const cochainValues = useStore((s) => s.cochainValues);
   const selectSimplex = useStore((s) => s.selectSimplex);
   const targets = nerve.byDim[fromK + 1] ?? [];
@@ -82,9 +295,13 @@ function DeltaEquationRows({ fromK }: { fromK: number }) {
       {targets.map((tau) => {
         const fs = faces(tau);
         const parts = fs.map(({ face, sign }) => ({
-          face, sign, v: cochainValues.get(simplexKey(face)) ?? 0,
+          face, sign, v: cochainValues.get(simplexKey(face)) ?? ring.zero,
         }));
-        const sum = parts.reduce((a, p) => a + p.sign * p.v, 0);
+        const sum = parts.reduce<RingElement>(
+          (a, p) => ring.add(a, ring.mul(ring.fromInt(p.sign), p.v)),
+          ring.zero,
+        );
+        const sumIsZero = ring.isZero(sum);
         return (
           <div key={simplexKey(tau)} className="delta-eq-row">
             <code className="delta-eq-target">δc({`{${tau.join(",")}}`})</code>
@@ -103,12 +320,12 @@ function DeltaEquationRows({ fromK }: { fromK: number }) {
             <span>=</span>
             <span className="delta-eq-numeric">
               {parts.map((p, i) => (
-                <ValueTerm key={i} sign={p.sign} value={p.v} leading={i === 0} />
+                <ValueTerm key={i} sign={p.sign} value={p.v} leading={i === 0} ring={ring} />
               ))}
             </span>
             <span>=</span>
-            <span className={`delta-eq-result ${sum === 0 ? "delta-eq-result--zero" : "delta-eq-result--nonzero"}`}>
-              {sum} {sum === 0 ? "✓" : "✗"}
+            <span className={`delta-eq-result ${sumIsZero ? "delta-eq-result--zero" : "delta-eq-result--nonzero"}`}>
+              {ring.format(sum)} {sumIsZero ? "✓" : "✗"}
             </span>
           </div>
         );
@@ -119,6 +336,7 @@ function DeltaEquationRows({ fromK }: { fromK: number }) {
 
 function LayerEditor({ k }: { k: CohomologyDegree }) {
   const nerve = useNerve();
+  const ring = useRing();
   const cochainValues = useStore((s) => s.cochainValues);
   const setCochainValue = useStore((s) => s.setCochainValue);
   const shadow = useDeltaShadow(k);
@@ -136,21 +354,17 @@ function LayerEditor({ k }: { k: CohomologyDegree }) {
       )}
       {simplices.map((s) => {
         const key = simplexKey(s);
-        const v = cochainValues.get(key) ?? 0;
-        const sh = shadow.get(key) ?? 0;
+        const v = cochainValues.get(key) ?? ring.zero;
+        const sh = shadow.get(key) ?? ring.zero;
         const hasShadow = shadow.has(key);
-        const matches = showShadow && hasShadow && v === sh;
+        const matches = showShadow && hasShadow && ring.eq(v, sh);
         return (
           <div key={key} className={`cochain-row${showShadow ? " cochain-row--shadow" : ""}`}>
             <code>{`{${s.join(",")}}`}</code>
-            <input
-              type="number"
-              value={v}
-              onChange={(e) => setCochainValue(s, parseInt0(e.target.value))}
-            />
+            <CochainInput value={v} ring={ring} onCommit={(nv) => setCochainValue(s, nv)} />
             {showShadow && (
               <span className={`shadow-cell${matches ? " shadow-cell--match" : ""}`}>
-                {hasShadow ? sh : "·"}
+                {hasShadow ? ring.format(sh) : "·"}
               </span>
             )}
           </div>
@@ -162,9 +376,10 @@ function LayerEditor({ k }: { k: CohomologyDegree }) {
 
 function LayerStatus({ k }: { k: CohomologyDegree }) {
   const nerve = useNerve();
+  const ring = useRing();
   const cochainValues = useStore((s) => s.cochainValues);
   const isCo = useIsCoboundary(k);
-  const delta = applyCoboundary(cochainValues, nerve, k);
+  const delta = applyCoboundary(cochainValues, nerve, k, ring);
   const isCocycle = delta.size === 0;
   return (
     <div className="layer-status">
@@ -183,6 +398,8 @@ function LayerStatus({ k }: { k: CohomologyDegree }) {
 function CohomologyChip({ k }: { k: CohomologyDegree }) {
   const cohK = useCohomology(k);
   const coords = useClassCoordinates(k);
+  const ring = useRing();
+  const ringSpec = useStore((s) => s.ring);
   const applyCochain = useStore((s) => s.applyCochain);
   const clearCochain = useStore((s) => s.clearCochain);
   const setCohomologyDegree = useStore((s) => s.setCohomologyDegree);
@@ -191,9 +408,13 @@ function CohomologyChip({ k }: { k: CohomologyDegree }) {
 
   const generators = cohK.cocycleBasis.filter((c) => !c.isCoboundary);
   const N = generators.length;
-  const hText = formatGroup(cohK.rank, cohK.torsion);
+  const hText = formatGroup(cohK.rank, cohK.torsion, ringSpec);
   const coordsText =
-    coords === null ? null : coords.length === 0 ? null : `[${coords.join(", ")}]`;
+    coords === null
+      ? null
+      : coords.length === 0
+        ? null
+        : `[${coords.map((x) => ring.format(x)).join(", ")}]`;
 
   useEffect(() => { if (pos >= N) setPos(-1); }, [N, pos]);
 
@@ -267,6 +488,7 @@ function LayerCard({ k }: { k: CohomologyDegree }) {
 
 function CupProductSection() {
   const nerve = useNerve();
+  const ring = useRing();
   const q = useStore((s) => s.cohomologyDegree);
   const pickedDegree = useStore((s) => s.cupPickedDegree);
   const pickedIndex = useStore((s) => s.cupPickedIndex);
@@ -280,8 +502,8 @@ function CupProductSection() {
   const idx = Math.min(pickedIndex, Math.max(0, generators.length - 1));
   const tooHigh = pickedDegree + q > 2;
   const preview = useCupResult();
-  const delta: Map<SimplexKey, number> = preview
-    ? applyCoboundary(preview.result.values, nerve, preview.result.degree)
+  const delta: Map<SimplexKey, RingElement> = preview
+    ? applyCoboundary(preview.result.values, nerve, preview.result.degree, ring)
     : new Map();
 
   return (
@@ -331,7 +553,7 @@ function CupProductSection() {
           ) : (
             <ul>
               {[...preview.result.values.entries()].map(([key, v]) => (
-                <li key={key}><code>{`{${key}}`}</code>: {v}</li>
+                <li key={key}><code>{`{${key}}`}</code>: {ring.format(v)}</li>
               ))}
             </ul>
           )}
@@ -381,9 +603,13 @@ function ChainView() {
 }
 
 export default function CohomologyPanel() {
+  const unlocked = useUnlocked();
   return (
     <div className="panel cohomology-panel">
-      <div className="panel-header"><h2>Cohomology</h2></div>
+      <div className="panel-header">
+        <h2>Cohomology</h2>
+        {unlocked.has("ring-picker") && <RingPicker />}
+      </div>
       <div className="panel-body">
         <ChainView />
       </div>

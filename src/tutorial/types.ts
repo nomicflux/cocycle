@@ -1,4 +1,5 @@
-import type { Disc, Nerve, Simplex, SimplexKey } from "../state/types";
+import type { Disc, DiscRegion, Nerve, Simplex, SimplexKey, Space } from "../state/types";
+import type { Ring, RingElement } from "../math/ring";
 
 export type TutorialMode = "free" | "tutorial";
 export type Consent = "pending" | "accepted" | "declined";
@@ -17,7 +18,8 @@ export type Feature =
   | "space-selector"
   | "presets"
   | "snapshots"
-  | "cover-status";
+  | "cover-status"
+  | "ring-picker";
 
 export const ALL_FEATURES: Feature[] = [
   "drawing",
@@ -34,22 +36,33 @@ export const ALL_FEATURES: Feature[] = [
   "presets",
   "snapshots",
   "cover-status",
+  "ring-picker",
 ];
 
 export type SceneSpec = {
-  discs: Array<{ cx: number; cy: number; r: number; color?: string }>;
+  space?: Space;
+  discs: Array<{
+    cx: number;
+    cy: number;
+    r: number;
+    color?: string;
+    region?: DiscRegion;
+  }>;
 };
 
 export type PredCtx = {
   discs: Disc[];
   nerve: Nerve;
-  cochainValues: Map<SimplexKey, number>;
+  cochainValues: Map<SimplexKey, RingElement>;
   cohomologyDegree: 0 | 1 | 2;
   selectedSimplex: Simplex | null;
   basisCursor: number;
   showArrows: boolean;
   showCupProduct: boolean;
   cupPickedIndex: number;
+  cupPickedDegree: 0 | 1 | 2;
+  space: Space;
+  ring: Ring;
 };
 
 export type Predicate = (ctx: PredCtx) => boolean;

@@ -1,4 +1,5 @@
-import type { Disc, Space } from "../state/types";
+import type { Disc, DiscRegion, Space } from "../state/types";
+import { deckApplyDisc, deckElements } from "./deck";
 
 const EPS = 1e-9;
 
@@ -60,46 +61,96 @@ export function tripleIntersects(a: Disc, b: Disc, c: Disc): boolean {
 }
 
 export const TORUS_PERIOD = 12;
-const TORUS_SHIFTS = [-TORUS_PERIOD, 0, TORUS_PERIOD] as const;
 
-function translateDisc(d: Disc, dx: number, dy: number): Disc {
-  return { ...d, cx: d.cx + dx, cy: d.cy + dy };
-}
-
-function discTranslates(d: Disc): Disc[] {
-  const out: Disc[] = [];
-  for (const dx of TORUS_SHIFTS) {
-    for (const dy of TORUS_SHIFTS) {
-      out.push(translateDisc(d, dx, dy));
+// Helly's theorem in R²: a finite family of convex sets has a common point iff
+// every triple does. For discs (convex), this exactly characterizes non-empty
+// k-fold intersection from the existing 2- and 3-disc tests.
+function planarConvexNonEmpty(discs: Disc[]): boolean {
+  if (discs.length === 0) return false;
+  if (discs.length === 1) return true;
+  if (discs.length === 2) return pairIntersects(discs[0], discs[1]);
+  for (let i = 0; i < discs.length; i++) {
+    for (let j = i + 1; j < discs.length; j++) {
+      for (let k = j + 1; k < discs.length; k++) {
+        if (!tripleIntersects(discs[i], discs[j], discs[k])) return false;
+      }
     }
   }
-  return out;
+  return true;
 }
 
-export function pairIntersectsTorus(a: Disc, b: Disc): boolean {
-  return discTranslates(b).some((bt) => pairIntersects(a, bt));
+// Count components of (d_1)_X ∩ … ∩ (d_k)_X in a quotient X = R² / Γ.
+//
+// Math: components of the intersection in X correspond to Γ-orbits of
+// connected components of π⁻¹(d_1∩…∩d_k) in R². Pick any disc whose lifts
+// are pairwise planarly disjoint as an *anchor*. Then:
+//   1. Each cover-component is contained in exactly one anchor-lift (a
+//      connected planar region lies in one connected piece of π⁻¹(anchor),
+//      and disjoint anchor-lifts ARE those pieces).
+//   2. Γ acts transitively on anchor-lifts, so each Γ-orbit of
+//      cover-components meets the central anchor-lift (γ = e) exactly once.
+// Therefore, fixing the anchor's transform to e and counting connected
+// components of the union of pieces touching the central anchor-lift gives
+// the exact count of components in the quotient.
+//
+// Any disc with radius < (period / 2) has pairwise disjoint lifts (lifts at
+// distinct deck centers are ≥ TORUS_PERIOD apart; sum of radii < period).
+// Pick the smallest-radius disc as anchor.
+function deckComponentCount(space: Space, discs: Disc[]): number {
+  let anchorIdx = 0;
+  for (let i = 1; i < discs.length; i++) {
+    if (discs[i].r < discs[anchorIdx].r) anchorIdx = i;
+  }
+  const elements = deckElements(space);
+  const others: Disc[] = [];
+  for (let i = 0; i < discs.length; i++) if (i !== anchorIdx) others.push(discs[i]);
+  const pieces: Disc[][] = [];
+  const stack: Disc[] = [discs[anchorIdx]];
+  const recur = (depth: number): void => {
+    if (depth === others.length) {
+      pieces.push(stack.slice());
+      return;
+    }
+    for (const g of elements) {
+      const lifted = deckApplyDisc(g, others[depth]);
+      stack.push(lifted);
+      if (planarConvexNonEmpty(stack)) recur(depth + 1);
+      stack.pop();
+    }
+  };
+  recur(0);
+
+  const n = pieces.length;
+  if (n === 0) return 0;
+  const parent = Array.from({ length: n }, (_, i) => i);
+  const find = (i: number): number =>
+    parent[i] === i ? i : (parent[i] = find(parent[i]));
+  for (let i = 0; i < n; i++) {
+    for (let j = i + 1; j < n; j++) {
+      if (planarConvexNonEmpty([...pieces[i], ...pieces[j]])) {
+        const ri = find(i), rj = find(j);
+        if (ri !== rj) parent[ri] = rj;
+      }
+    }
+  }
+  const roots = new Set<number>();
+  for (let i = 0; i < n; i++) roots.add(find(i));
+  return roots.size;
 }
 
 export function pairComponentCount(space: Space, a: Disc, b: Disc): number {
-  let n = 0;
-  for (const bt of spaceTranslates(b, space)) {
-    if (pairIntersects(a, bt)) n++;
-  }
-  return n;
+  if (space === "wedge2") return wedge2PairComponentCount(a, b);
+  return deckComponentCount(space, [a, b]);
 }
 
 export function tripleComponentCount(space: Space, a: Disc, b: Disc, c: Disc): number {
-  let n = 0;
-  for (const bt of spaceTranslates(b, space)) {
-    for (const ct of spaceTranslates(c, space)) {
-      if (tripleIntersects(a, bt, ct)) n++;
-    }
-  }
-  return n;
+  if (space === "wedge2") return wedge2TripleComponentCount(a, b, c);
+  return deckComponentCount(space, [a, b, c]);
 }
 
 export function coverComplete(discs: Disc[], space: Space): boolean {
   if (space === "planar") return true;
+  if (space === "wedge2") return coverCompleteWedge2(discs);
   if (discs.length === 0) return false;
   const P = TORUS_PERIOD;
   const HALF = P / 2;
@@ -122,17 +173,6 @@ export function coverComplete(discs: Disc[], space: Space): boolean {
   return true;
 }
 
-export function tripleIntersectsTorus(a: Disc, b: Disc, c: Disc): boolean {
-  const bs = discTranslates(b);
-  const cs = discTranslates(c);
-  for (const bt of bs) {
-    for (const ct of cs) {
-      if (tripleIntersects(a, bt, ct)) return true;
-    }
-  }
-  return false;
-}
-
 function planarQuadNonEmpty(a: Disc, b: Disc, c: Disc, d: Disc): boolean {
   return (
     tripleIntersects(a, b, c) &&
@@ -142,13 +182,281 @@ function planarQuadNonEmpty(a: Disc, b: Disc, c: Disc, d: Disc): boolean {
   );
 }
 
-export function quadIntersectsTorus(a: Disc, b: Disc, c: Disc, d: Disc): boolean {
-  const bs = discTranslates(b);
-  const cs = discTranslates(c);
-  const ds = discTranslates(d);
-  for (const bt of bs) {
-    for (const ct of cs) {
-      for (const dt of ds) {
+// ============================================================================
+// wedge2: S² ∨ S¹ ∨ S¹
+// ============================================================================
+
+const WEDGE_LEFT_CX_MIN = -6;
+const WEDGE_LEFT_CX_MAX = -2;
+const WEDGE_RIGHT_CX_MIN = 2;
+const WEDGE_RIGHT_CX_MAX = 6;
+const WEDGE_SPHERE_CX = 0;
+const WEDGE_SPHERE_CY = 3;
+const WEDGE_SPHERE_ZONE_R = 3;
+const WEDGE_SPHERE_SCALE = 3;
+const WEDGE_BASEPOINT_CX = 0;
+const WEDGE_BASEPOINT_CY = -3;
+const WEDGE_BASEPOINT_ZONE_R = 0.8;
+const WEDGE_STRIP_PERIOD = TORUS_PERIOD;
+
+const BASEPOINT_SHADOW_LEFT_CX = (WEDGE_LEFT_CX_MIN + WEDGE_LEFT_CX_MAX) / 2;
+const BASEPOINT_SHADOW_LEFT_CY = 0;
+const BASEPOINT_SHADOW_RIGHT_CX = (WEDGE_RIGHT_CX_MIN + WEDGE_RIGHT_CX_MAX) / 2;
+const BASEPOINT_SHADOW_RIGHT_CY = 0;
+const BASEPOINT_SHADOW_SPHERE_CX = WEDGE_SPHERE_CX;
+const BASEPOINT_SHADOW_SPHERE_CY = WEDGE_SPHERE_CY;
+
+export function regionForPosition(cx: number, cy: number): DiscRegion {
+  const dxB = cx - WEDGE_BASEPOINT_CX;
+  const dyB = cy - WEDGE_BASEPOINT_CY;
+  if (dxB * dxB + dyB * dyB <= WEDGE_BASEPOINT_ZONE_R * WEDGE_BASEPOINT_ZONE_R) {
+    return "basepoint";
+  }
+  const dxS = cx - WEDGE_SPHERE_CX;
+  const dyS = cy - WEDGE_SPHERE_CY;
+  if (dxS * dxS + dyS * dyS <= WEDGE_SPHERE_ZONE_R * WEDGE_SPHERE_ZONE_R) {
+    return "sphere";
+  }
+  if (cx <= WEDGE_LEFT_CX_MAX) return "left";
+  if (cx >= WEDGE_RIGHT_CX_MIN) return "right";
+  return cx < 0 ? "left" : "right";
+}
+
+type Vec3 = [number, number, number];
+
+function sphereProject(cx: number, cy: number): Vec3 {
+  const u = (cx - WEDGE_SPHERE_CX) / WEDGE_SPHERE_SCALE;
+  const v = (cy - WEDGE_SPHERE_CY) / WEDGE_SPHERE_SCALE;
+  const u2v2 = u * u + v * v;
+  const denom = u2v2 + 1;
+  return [(2 * u) / denom, (2 * v) / denom, (u2v2 - 1) / denom];
+}
+
+function sphereCapCenter(d: Disc): Vec3 {
+  return sphereProject(d.cx, d.cy);
+}
+
+function sphereCapRadius(d: Disc): number {
+  return Math.min(d.r, Math.PI - 1e-6);
+}
+
+function dot3(a: Vec3, b: Vec3): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function pointInSphereCap(p: Vec3, center: Vec3, radius: number): boolean {
+  return dot3(p, center) >= Math.cos(radius) - EPS;
+}
+
+function normalize3(v: Vec3): Vec3 {
+  const n = Math.hypot(v[0], v[1], v[2]);
+  if (n < EPS) return [0, 0, 1];
+  return [v[0] / n, v[1] / n, v[2] / n];
+}
+
+function cross3(a: Vec3, b: Vec3): Vec3 {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
+function capBoundaryIntersections(
+  c1: Vec3, r1: number, c2: Vec3, r2: number,
+): Vec3[] {
+  const cosR1 = Math.cos(r1);
+  const cosR2 = Math.cos(r2);
+  const d = dot3(c1, c2);
+  const denom = 1 - d * d;
+  if (denom < EPS) return [];
+  const alpha = (cosR1 - d * cosR2) / denom;
+  const beta = (cosR2 - d * cosR1) / denom;
+  const ax = cross3(c1, c2);
+  const crossN2 = dot3(ax, ax);
+  if (crossN2 < EPS) return [];
+  const base: Vec3 = [
+    alpha * c1[0] + beta * c2[0],
+    alpha * c1[1] + beta * c2[1],
+    alpha * c1[2] + beta * c2[2],
+  ];
+  const baseN2 = dot3(base, base);
+  const gammaSq = (1 - baseN2) / crossN2;
+  if (gammaSq < -EPS) return [];
+  const gamma = Math.sqrt(Math.max(0, gammaSq));
+  const p1: Vec3 = [
+    base[0] + gamma * ax[0],
+    base[1] + gamma * ax[1],
+    base[2] + gamma * ax[2],
+  ];
+  if (gamma < EPS) return [p1];
+  const p2: Vec3 = [
+    base[0] - gamma * ax[0],
+    base[1] - gamma * ax[1],
+    base[2] - gamma * ax[2],
+  ];
+  return [p1, p2];
+}
+
+export function spherePairIntersects(a: Disc, b: Disc): boolean {
+  const ca = sphereCapCenter(a);
+  const cb = sphereCapCenter(b);
+  const ra = sphereCapRadius(a);
+  const rb = sphereCapRadius(b);
+  const sum = ra + rb;
+  if (sum >= Math.PI) return true;
+  return dot3(ca, cb) >= Math.cos(sum) - EPS;
+}
+
+function sphereCapsCommon(caps: Array<{ c: Vec3; r: number }>): boolean {
+  const candidates: Vec3[] = [];
+  for (const cap of caps) candidates.push(cap.c);
+  for (let i = 0; i < caps.length; i++) {
+    for (let j = i + 1; j < caps.length; j++) {
+      const pts = capBoundaryIntersections(caps[i].c, caps[i].r, caps[j].c, caps[j].r);
+      for (const p of pts) candidates.push(p);
+    }
+  }
+  const sum: Vec3 = [0, 0, 0];
+  for (const cap of caps) {
+    sum[0] += cap.c[0]; sum[1] += cap.c[1]; sum[2] += cap.c[2];
+  }
+  candidates.push(normalize3(sum));
+  for (const p of candidates) {
+    let inside = true;
+    for (const cap of caps) {
+      if (!pointInSphereCap(p, cap.c, cap.r)) { inside = false; break; }
+    }
+    if (inside) return true;
+  }
+  return false;
+}
+
+export function sphereTripleIntersects(a: Disc, b: Disc, c: Disc): boolean {
+  if (!spherePairIntersects(a, b)) return false;
+  if (!spherePairIntersects(a, c)) return false;
+  if (!spherePairIntersects(b, c)) return false;
+  return sphereCapsCommon([
+    { c: sphereCapCenter(a), r: sphereCapRadius(a) },
+    { c: sphereCapCenter(b), r: sphereCapRadius(b) },
+    { c: sphereCapCenter(c), r: sphereCapRadius(c) },
+  ]);
+}
+
+export function sphereQuadIntersects(a: Disc, b: Disc, c: Disc, d: Disc): boolean {
+  if (!sphereTripleIntersects(a, b, c)) return false;
+  if (!sphereTripleIntersects(a, b, d)) return false;
+  if (!sphereTripleIntersects(a, c, d)) return false;
+  if (!sphereTripleIntersects(b, c, d)) return false;
+  return sphereCapsCommon([
+    { c: sphereCapCenter(a), r: sphereCapRadius(a) },
+    { c: sphereCapCenter(b), r: sphereCapRadius(b) },
+    { c: sphereCapCenter(c), r: sphereCapRadius(c) },
+    { c: sphereCapCenter(d), r: sphereCapRadius(d) },
+  ]);
+}
+
+function basepointShadow(d: Disc, region: DiscRegion): Disc {
+  switch (region) {
+    case "left":
+      return { ...d, cx: BASEPOINT_SHADOW_LEFT_CX, cy: BASEPOINT_SHADOW_LEFT_CY, region: "left" };
+    case "right":
+      return { ...d, cx: BASEPOINT_SHADOW_RIGHT_CX, cy: BASEPOINT_SHADOW_RIGHT_CY, region: "right" };
+    case "sphere":
+      return { ...d, cx: BASEPOINT_SHADOW_SPHERE_CX, cy: BASEPOINT_SHADOW_SPHERE_CY, region: "sphere" };
+    case "basepoint":
+      return d;
+  }
+}
+
+function discRegion(d: Disc): DiscRegion {
+  return d.region ?? "basepoint";
+}
+
+// A disc D in chart c covers the basepoint iff D's chart-image contains the
+// basepoint's shadow in c. Strip charts: the strip is y-periodic, the
+// basepoint sits at y = 0, and stripPairIntersects already treats stripped
+// discs as y-intervals, so we mirror that 1-D containment test. Sphere chart:
+// the basepoint's shadow is at the south pole of the unit sphere; the disc's
+// spherical cap contains it iff the south pole is within the cap.
+function wedge2ReachesBasepoint(d: Disc, region: DiscRegion): boolean {
+  switch (region) {
+    case "basepoint": return true;
+    case "left":
+    case "right": {
+      const P = WEDGE_STRIP_PERIOD;
+      const dy = d.cy;
+      const wrapped = Math.min(Math.abs(dy), P - Math.abs(((dy % P) + P) % P));
+      return wrapped <= d.r + EPS;
+    }
+    case "sphere": {
+      const south = sphereProject(BASEPOINT_SHADOW_SPHERE_CX, BASEPOINT_SHADOW_SPHERE_CY);
+      return pointInSphereCap(south, sphereCapCenter(d), sphereCapRadius(d));
+    }
+  }
+}
+
+// Wedge2 = (sphere) ∨ (left S¹) ∨ (right S¹) glued at one basepoint. For
+// non-basepoint disc images in DIFFERENT charts, the only point they can
+// share is the basepoint; they do iff every disc reaches it. For basepoint
+// discs the image extends into every chart, so a basepoint disc + chart disc
+// is handled by shadowing the basepoint disc into the chart. Two basepoint
+// discs share the basepoint regardless of id.
+function wedge2CommonChart(regions: DiscRegion[]): DiscRegion | null {
+  let target: DiscRegion | null = null;
+  for (const r of regions) {
+    if (r === "basepoint") continue;
+    if (target === null) target = r;
+    else if (target !== r) return null;
+  }
+  return target;
+}
+
+function stripPairIntersects(a: Disc, b: Disc): boolean {
+  const P = WEDGE_STRIP_PERIOD;
+  for (const dy of [-P, 0, P]) {
+    if (Math.abs(a.cy - (b.cy + dy)) <= a.r + b.r + EPS) return true;
+  }
+  return false;
+}
+
+function stripPairComponents(a: Disc, b: Disc): number {
+  const P = WEDGE_STRIP_PERIOD;
+  let n = 0;
+  for (const dy of [-P, 0, P]) {
+    if (Math.abs(a.cy - (b.cy + dy)) <= a.r + b.r + EPS) n++;
+  }
+  return n;
+}
+
+function stripTranslatesOf(d: Disc): Disc[] {
+  const P = WEDGE_STRIP_PERIOD;
+  return [-P, 0, P].map((dy) => ({ ...d, cy: d.cy + dy }));
+}
+
+function stripTripleIntersects(a: Disc, b: Disc, c: Disc): boolean {
+  for (const bt of stripTranslatesOf(b)) {
+    for (const ct of stripTranslatesOf(c)) {
+      if (tripleIntersects(a, bt, ct)) return true;
+    }
+  }
+  return false;
+}
+
+function stripTripleComponents(a: Disc, b: Disc, c: Disc): number {
+  let n = 0;
+  for (const bt of stripTranslatesOf(b)) {
+    for (const ct of stripTranslatesOf(c)) {
+      if (tripleIntersects(a, bt, ct)) n++;
+    }
+  }
+  return n;
+}
+
+function stripQuadIntersects(a: Disc, b: Disc, c: Disc, d: Disc): boolean {
+  for (const bt of stripTranslatesOf(b)) {
+    for (const ct of stripTranslatesOf(c)) {
+      for (const dt of stripTranslatesOf(d)) {
         if (planarQuadNonEmpty(a, bt, ct, dt)) return true;
       }
     }
@@ -156,46 +464,153 @@ export function quadIntersectsTorus(a: Disc, b: Disc, c: Disc, d: Disc): boolean
   return false;
 }
 
-type EpsFn = (d: Disc) => Disc;
-
-const KLEIN_EPSILONS: EpsFn[] = [
-  (d) => d,
-  (d) => ({ ...d, cx: d.cx + TORUS_PERIOD, cy: d.cy }),
-  (d) => ({ ...d, cx: -d.cx, cy: d.cy + TORUS_PERIOD }),
-  (d) => ({ ...d, cx: -d.cx + TORUS_PERIOD, cy: d.cy + TORUS_PERIOD }),
-];
-
-const RP2_EPSILONS: EpsFn[] = [
-  (d) => d,
-  (d) => ({ ...d, cx: d.cx + TORUS_PERIOD, cy: -d.cy }),
-  (d) => ({ ...d, cx: -d.cx, cy: d.cy + TORUS_PERIOD }),
-  (d) => ({ ...d, cx: -d.cx + TORUS_PERIOD, cy: -d.cy - TORUS_PERIOD }),
-];
-
-function twistedTranslates(d: Disc, epsilons: EpsFn[]): Disc[] {
-  const out: Disc[] = [];
-  const L = 2 * TORUS_PERIOD;
-  for (const eps of epsilons) {
-    const base = eps(d);
-    for (const dx of [-L, 0, L]) {
-      for (const dy of [-L, 0, L]) {
-        out.push({ ...base, cx: base.cx + dx, cy: base.cy + dy });
-      }
-    }
+// Lift the {basepoint, sphere, left, right} regions to a common chart when
+// possible, then apply chart-geometric intersection. If no common chart
+// exists (mixed non-basepoint regions), the only shared point is the
+// basepoint — present iff every disc reaches it.
+function wedge2IntersectsK(discs: Disc[]): boolean {
+  const regions = discs.map(discRegion);
+  const target = wedge2CommonChart(regions);
+  if (target === null) {
+    return discs.every((d, i) => wedge2ReachesBasepoint(d, regions[i]));
   }
-  return out;
+  const cast: Disc[] = discs.map((d, i) =>
+    regions[i] === "basepoint" ? basepointShadow(d, target) : d,
+  );
+  if (target === "left" || target === "right") {
+    if (cast.length === 2) return stripPairIntersects(cast[0], cast[1]);
+    if (cast.length === 3) return stripTripleIntersects(cast[0], cast[1], cast[2]);
+    return stripQuadIntersects(cast[0], cast[1], cast[2], cast[3]);
+  }
+  // target === "sphere"
+  if (cast.length === 2) return spherePairIntersects(cast[0], cast[1]);
+  if (cast.length === 3) return sphereTripleIntersects(cast[0], cast[1], cast[2]);
+  return sphereQuadIntersects(cast[0], cast[1], cast[2], cast[3]);
 }
 
-export function spaceTranslates(d: Disc, space: Space): Disc[] {
-  switch (space) {
-    case "planar": return [d];
-    case "torus": return discTranslates(d);
-    case "klein": return twistedTranslates(d, KLEIN_EPSILONS);
-    case "projective": return twistedTranslates(d, RP2_EPSILONS);
+function wedge2PairIntersects(a: Disc, b: Disc): boolean {
+  return wedge2IntersectsK([a, b]);
+}
+
+function wedge2TripleIntersects(a: Disc, b: Disc, c: Disc): boolean {
+  return wedge2IntersectsK([a, b, c]);
+}
+
+function wedge2QuadIntersects(a: Disc, b: Disc, c: Disc, d: Disc): boolean {
+  return wedge2IntersectsK([a, b, c, d]);
+}
+
+function wedge2PairComponentCount(a: Disc, b: Disc): number {
+  const regions = [discRegion(a), discRegion(b)];
+  const target = wedge2CommonChart(regions);
+  if (target === null) {
+    return wedge2IntersectsK([a, b]) ? 1 : 0;
   }
+  const aa = regions[0] === "basepoint" ? basepointShadow(a, target) : a;
+  const bb = regions[1] === "basepoint" ? basepointShadow(b, target) : b;
+  if (target === "left" || target === "right") return stripPairComponents(aa, bb);
+  return spherePairIntersects(aa, bb) ? 1 : 0;
+}
+
+function wedge2TripleComponentCount(a: Disc, b: Disc, c: Disc): number {
+  const regions = [discRegion(a), discRegion(b), discRegion(c)];
+  const target = wedge2CommonChart(regions);
+  if (target === null) {
+    return wedge2IntersectsK([a, b, c]) ? 1 : 0;
+  }
+  const aa = regions[0] === "basepoint" ? basepointShadow(a, target) : a;
+  const bb = regions[1] === "basepoint" ? basepointShadow(b, target) : b;
+  const cc = regions[2] === "basepoint" ? basepointShadow(c, target) : c;
+  if (target === "left" || target === "right") return stripTripleComponents(aa, bb, cc);
+  return sphereTripleIntersects(aa, bb, cc) ? 1 : 0;
+}
+
+function wedge2Translates(d: Disc): Disc[] {
+  const r = discRegion(d);
+  if (r === "left" || r === "right") return stripTranslatesOf(d);
+  return [d];
+}
+
+function coverStrip(stripDiscs: Disc[], bpShadow: Disc): boolean {
+  const all = [bpShadow, ...stripDiscs];
+  const P = WEDGE_STRIP_PERIOD;
+  const N = 80;
+  for (let i = 0; i < N; i++) {
+    const y = -P / 2 + (i + 0.5) * (P / N);
+    let covered = false;
+    for (const d of all) {
+      for (const dy of [-P, 0, P]) {
+        if (Math.abs(y - (d.cy + dy)) <= d.r + EPS) { covered = true; break; }
+      }
+      if (covered) break;
+    }
+    if (!covered) return false;
+  }
+  return true;
+}
+
+function coverSphere(sphereDiscs: Disc[], bpShadow: Disc): boolean {
+  const all = [bpShadow, ...sphereDiscs];
+  const N = 300;
+  const phi = Math.PI * (Math.sqrt(5) - 1);
+  for (let i = 0; i < N; i++) {
+    const y = 1 - (i / Math.max(1, N - 1)) * 2;
+    const ringR = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = phi * i;
+    const p: Vec3 = [Math.cos(theta) * ringR, y, Math.sin(theta) * ringR];
+    let covered = false;
+    for (const d of all) {
+      if (pointInSphereCap(p, sphereCapCenter(d), sphereCapRadius(d))) { covered = true; break; }
+    }
+    if (!covered) return false;
+  }
+  return true;
+}
+
+function coverCompleteWedge2(discs: Disc[]): boolean {
+  const bp = discs.find((d) => d.region === "basepoint");
+  if (!bp) return false;
+  const lefts = discs.filter((d) => d.region === "left");
+  if (!coverStrip(lefts, basepointShadow(bp, "left"))) return false;
+  const rights = discs.filter((d) => d.region === "right");
+  if (!coverStrip(rights, basepointShadow(bp, "right"))) return false;
+  const spheres = discs.filter((d) => d.region === "sphere");
+  if (!coverSphere(spheres, basepointShadow(bp, "sphere"))) return false;
+  return true;
+}
+
+function normalizeWedge2(
+  cx: number, cy: number,
+): { cx: number; cy: number; region: DiscRegion } {
+  const region = regionForPosition(cx, cy);
+  const P = WEDGE_STRIP_PERIOD;
+  if (region === "left") {
+    const ny = ((cy + P / 2) % P + P) % P - P / 2;
+    const nx = Math.max(WEDGE_LEFT_CX_MIN, Math.min(WEDGE_LEFT_CX_MAX, cx));
+    return { cx: nx, cy: ny, region };
+  }
+  if (region === "right") {
+    const ny = ((cy + P / 2) % P + P) % P - P / 2;
+    const nx = Math.max(WEDGE_RIGHT_CX_MIN, Math.min(WEDGE_RIGHT_CX_MAX, cx));
+    return { cx: nx, cy: ny, region };
+  }
+  if (region === "basepoint") {
+    return { cx: WEDGE_BASEPOINT_CX, cy: WEDGE_BASEPOINT_CY, region };
+  }
+  return { cx, cy, region };
+}
+
+// ============================================================================
+// Space dispatch
+// ============================================================================
+
+export function spaceTranslates(d: Disc, space: Space): Disc[] {
+  if (space === "wedge2") return wedge2Translates(d);
+  return deckElements(space).map((g) => deckApplyDisc(g, d));
 }
 
 export function pairIntersectsOn(space: Space, a: Disc, b: Disc): boolean {
+  if (space === "wedge2") return wedge2PairIntersects(a, b);
   for (const bt of spaceTranslates(b, space)) {
     if (pairIntersects(a, bt)) return true;
   }
@@ -203,6 +618,7 @@ export function pairIntersectsOn(space: Space, a: Disc, b: Disc): boolean {
 }
 
 export function tripleIntersectsOn(space: Space, a: Disc, b: Disc, c: Disc): boolean {
+  if (space === "wedge2") return wedge2TripleIntersects(a, b, c);
   for (const bt of spaceTranslates(b, space)) {
     for (const ct of spaceTranslates(c, space)) {
       if (tripleIntersects(a, bt, ct)) return true;
@@ -212,6 +628,7 @@ export function tripleIntersectsOn(space: Space, a: Disc, b: Disc, c: Disc): boo
 }
 
 export function quadIntersectsOn(space: Space, a: Disc, b: Disc, c: Disc, d: Disc): boolean {
+  if (space === "wedge2") return wedge2QuadIntersects(a, b, c, d);
   for (const bt of spaceTranslates(b, space)) {
     for (const ct of spaceTranslates(c, space)) {
       for (const dt of spaceTranslates(d, space)) {
@@ -226,9 +643,10 @@ export function normalizePosition(
   cx: number,
   cy: number,
   space: Space,
-): { cx: number; cy: number } {
+): { cx: number; cy: number; region?: DiscRegion } {
   const P = TORUS_PERIOD;
   const HALF = P / 2;
+  if (space === "wedge2") return normalizeWedge2(cx, cy);
   if (space === "planar") return { cx, cy };
   if (space === "torus") {
     return {

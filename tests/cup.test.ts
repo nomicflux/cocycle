@@ -6,10 +6,27 @@ import { cup } from "../src/math/cup";
 import { buildNerve } from "../src/math/nerve";
 import { cohomology } from "../src/math/cohomology";
 import { faces } from "../src/math/coboundary";
+import type { RingElement } from "../src/math/ring";
 
 const D = (cx: number, cy: number, r: number): Disc => ({
   id: `${cx},${cy},${r}`, cx, cy, r, color: "#000",
 });
+
+function toN(values: Map<SimplexKey, RingElement>): Map<SimplexKey, number> {
+  const out = new Map<SimplexKey, number>();
+  for (const [k, v] of values) out.set(k, v[0]);
+  return out;
+}
+
+function fromN(values: Map<SimplexKey, number>): Map<SimplexKey, RingElement> {
+  const out = new Map<SimplexKey, RingElement>();
+  for (const [k, v] of values) out.set(k, [v]);
+  return out;
+}
+
+function makeCochain(degree: number, pairs: Array<[string, number]>): Cochain {
+  return { degree, values: fromN(new Map(pairs)) };
+}
 
 function deltaMap(
   values: Map<SimplexKey, number>,
@@ -65,65 +82,50 @@ const tetraNerve: Nerve = {
 
 describe("cup — degree composition", () => {
   it("cup of a p-cochain and q-cochain has degree p+q", () => {
-    const a: Cochain = { degree: 1, values: new Map([["0,1", 3]]) };
-    const b: Cochain = { degree: 1, values: new Map([["1,2", 5]]) };
+    const a = makeCochain(1, [["0,1", 3]]);
+    const b = makeCochain(1, [["1,2", 5]]);
     expect(cup(a, b, tetraNerve).degree).toBe(2);
   });
 });
 
 describe("cup — identity by constant-1 0-cochain", () => {
-  const ones: Cochain = {
-    degree: 0,
-    values: new Map([["0", 1], ["1", 1], ["2", 1], ["3", 1]]),
-  };
-  const beta: Cochain = {
-    degree: 1,
-    values: new Map([["0,1", 2], ["1,2", -3], ["2,3", 5]]),
-  };
+  const ones = makeCochain(0, [["0", 1], ["1", 1], ["2", 1], ["3", 1]]);
+  const beta = makeCochain(1, [["0,1", 2], ["1,2", -3], ["2,3", 5]]);
   it("ones ∪ β = β (left identity on H^q)", () => {
     const r = cup(ones, beta, tetraNerve);
-    expect(mapsEqual(r.values, beta.values)).toBe(true);
+    expect(mapsEqual(toN(r.values), toN(beta.values))).toBe(true);
   });
   it("β ∪ ones = β (right identity on H^q)", () => {
     const r = cup(beta, ones, tetraNerve);
-    expect(mapsEqual(r.values, beta.values)).toBe(true);
+    expect(mapsEqual(toN(r.values), toN(beta.values))).toBe(true);
   });
 });
 
 describe("cup — Leibniz identity δ(a∪b) = (δa)∪b + (-1)^p · a∪(δb)", () => {
   function leibniz(a: Cochain, b: Cochain, nerve: Nerve): boolean {
     const ab = cup(a, b, nerve);
-    const lhs = deltaMap(ab.values, nerve, ab.degree);
-    const da: Cochain = { degree: a.degree + 1, values: deltaMap(a.values, nerve, a.degree) };
-    const db: Cochain = { degree: b.degree + 1, values: deltaMap(b.values, nerve, b.degree) };
-    const t1 = cup(da, b, nerve).values;
-    const t2 = cup(a, db, nerve).values;
+    const lhs = deltaMap(toN(ab.values), nerve, ab.degree);
+    const da: Cochain = { degree: a.degree + 1, values: fromN(deltaMap(toN(a.values), nerve, a.degree)) };
+    const db: Cochain = { degree: b.degree + 1, values: fromN(deltaMap(toN(b.values), nerve, b.degree)) };
+    const t1 = toN(cup(da, b, nerve).values);
+    const t2 = toN(cup(a, db, nerve).values);
     const sign = a.degree % 2 === 0 ? 1 : -1;
     const rhs = addMaps(t1, scaleMap(t2, sign));
     return mapsEqual(lhs, rhs);
   }
   it("holds for two 0-cochains on the ∂Δ³ nerve", () => {
-    const a: Cochain = { degree: 0, values: new Map([["0", 2], ["1", -1], ["2", 3], ["3", 0]]) };
-    const b: Cochain = { degree: 0, values: new Map([["0", 1], ["1", 4], ["2", -2], ["3", 5]]) };
+    const a = makeCochain(0, [["0", 2], ["1", -1], ["2", 3], ["3", 0]]);
+    const b = makeCochain(0, [["0", 1], ["1", 4], ["2", -2], ["3", 5]]);
     expect(leibniz(a, b, tetraNerve)).toBe(true);
   });
   it("holds for a 0-cochain and a 1-cochain on ∂Δ³", () => {
-    const a: Cochain = { degree: 0, values: new Map([["0", 1], ["1", -2], ["2", 3]]) };
-    const b: Cochain = {
-      degree: 1,
-      values: new Map([["0,1", 1], ["1,2", -2], ["0,3", 4], ["2,3", 5]]),
-    };
+    const a = makeCochain(0, [["0", 1], ["1", -2], ["2", 3]]);
+    const b = makeCochain(1, [["0,1", 1], ["1,2", -2], ["0,3", 4], ["2,3", 5]]);
     expect(leibniz(a, b, tetraNerve)).toBe(true);
   });
   it("holds for two 1-cochains on ∂Δ³", () => {
-    const a: Cochain = {
-      degree: 1,
-      values: new Map([["0,1", 1], ["1,2", 2], ["0,3", -1], ["2,3", 3]]),
-    };
-    const b: Cochain = {
-      degree: 1,
-      values: new Map([["0,2", 4], ["1,3", -2], ["0,1", 3], ["2,3", 1]]),
-    };
+    const a = makeCochain(1, [["0,1", 1], ["1,2", 2], ["0,3", -1], ["2,3", 3]]);
+    const b = makeCochain(1, [["0,2", 4], ["1,3", -2], ["0,1", 3], ["2,3", 1]]);
     expect(leibniz(a, b, tetraNerve)).toBe(true);
   });
 });

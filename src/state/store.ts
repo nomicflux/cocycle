@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import type { Disc, Simplex, SimplexKey, Space } from "./types";
 import { simplexKey } from "./types";
+import type { RingElement, RingSpec } from "../math/ring";
+import { makeRing } from "../math/ring";
 import { TORUS_PERIOD, normalizePosition } from "../math/intersection";
 import {
   loadFromStorage,
@@ -35,6 +37,16 @@ const keyDim = (k: SimplexKey): number => k.split(",").length - 1;
 
 function discsFromScene(scene: SceneSpec, space: Space): Disc[] {
   return scene.discs.map((d) => {
+    if (space === "wedge2" && d.region) {
+      return {
+        id: makeDiscId(),
+        cx: d.cx,
+        cy: d.cy,
+        r: clampR(d.r, space),
+        color: d.color ?? randomPastel(),
+        region: d.region,
+      };
+    }
     const norm = normalizePosition(d.cx, d.cy, space);
     return {
       id: makeDiscId(),
@@ -42,6 +54,7 @@ function discsFromScene(scene: SceneSpec, space: Space): Disc[] {
       cy: norm.cy,
       r: clampR(d.r, space),
       color: d.color ?? randomPastel(),
+      region: space === "wedge2" ? norm.region : undefined,
     };
   });
 }
@@ -50,7 +63,8 @@ type State = {
   discs: Disc[];
   selectedSimplex: Simplex | null;
   cohomologyDegree: CohomologyDegree;
-  cochainValues: Map<SimplexKey, number>;
+  cochainValues: Map<SimplexKey, RingElement>;
+  ring: RingSpec;
   snapshots: Snapshot[];
   compareWithSnapshot: string | null;
   basisCursor: number;
@@ -80,9 +94,10 @@ type Actions = {
   ) => void;
   selectSimplex: (s: Simplex | null) => void;
   setCohomologyDegree: (d: CohomologyDegree) => void;
-  setCochainValue: (s: Simplex, v: number) => void;
+  setCochainValue: (s: Simplex, v: RingElement) => void;
   clearCochain: () => void;
-  applyCochain: (degree: CohomologyDegree, values: Map<SimplexKey, number>) => void;
+  applyCochain: (degree: CohomologyDegree, values: Map<SimplexKey, RingElement>) => void;
+  setRing: (spec: RingSpec) => void;
   saveSnapshot: (name: string) => void;
   removeSnapshot: (id: string) => void;
   setCompareWith: (id: string | null) => void;
@@ -111,11 +126,14 @@ const initialTutorialStep = Math.min(
   Math.max(0, persisted.tutorialStep),
   CHAPTERS.length - 1,
 );
-const initialSpace: Space = initialTutorialMode === "tutorial" ? "torus" : "planar";
 const initialSceneAtBoot =
   initialTutorialMode === "tutorial"
     ? CHAPTERS[initialTutorialStep]?.scene
     : undefined;
+const initialSpace: Space =
+  initialTutorialMode === "tutorial"
+    ? (initialSceneAtBoot?.space ?? "torus")
+    : "planar";
 const initialDiscs: Disc[] = initialSceneAtBoot
   ? discsFromScene(initialSceneAtBoot, initialSpace)
   : [];
@@ -125,6 +143,7 @@ export const useStore = create<State & Actions>((set, get) => ({
   selectedSimplex: null,
   cohomologyDegree: initialTutorialMode === "tutorial" ? 0 : 1,
   cochainValues: new Map(),
+  ring: { kind: "Z" },
   snapshots: [],
   compareWithSnapshot: null,
   basisCursor: 0,
@@ -142,12 +161,22 @@ export const useStore = create<State & Actions>((set, get) => ({
   glossaryOpen: false,
 
   addDisc: (cx, cy, r) =>
-    set((s) => ({
-      discs: [
-        ...s.discs,
-        { id: makeDiscId(), cx, cy, r: clampR(r, s.space), color: randomPastel() },
-      ],
-    })),
+    set((s) => {
+      const norm = normalizePosition(cx, cy, s.space);
+      return {
+        discs: [
+          ...s.discs,
+          {
+            id: makeDiscId(),
+            cx: norm.cx,
+            cy: norm.cy,
+            r: clampR(r, s.space),
+            color: randomPastel(),
+            region: s.space === "wedge2" ? norm.region : undefined,
+          },
+        ],
+      };
+    }),
   moveDisc: (id, cx, cy) =>
     set((s) => ({
       discs: s.discs.map((d) =>
@@ -173,12 +202,14 @@ export const useStore = create<State & Actions>((set, get) => ({
       const sp = space ?? s.space;
       return {
         discs: discs.map((d) => {
-          const { cx, cy } = normalizePosition(d.cx, d.cy, sp);
+          const norm = normalizePosition(d.cx, d.cy, sp);
           return {
             id: makeDiscId(),
-            cx, cy,
+            cx: norm.cx,
+            cy: norm.cy,
             r: clampR(d.r, sp),
             color: d.color ?? randomPastel(),
+            region: sp === "wedge2" ? norm.region : undefined,
           };
         }),
         space: sp,
@@ -195,7 +226,8 @@ export const useStore = create<State & Actions>((set, get) => ({
     set((s) => {
       const key = simplexKey(sigma);
       const next = new Map(s.cochainValues);
-      if (v === 0) next.delete(key);
+      const ring = makeRing(s.ring);
+      if (ring.isZero(v)) next.delete(key);
       else next.set(key, v);
       return { cochainValues: next };
     }),
@@ -245,8 +277,9 @@ export const useStore = create<State & Actions>((set, get) => ({
       basisCursor: 0,
       discs: state.discs.map((d) => {
         const r = clampR(d.r, sp);
-        const { cx, cy } = normalizePosition(d.cx, d.cy, sp);
-        return { ...d, r, cx, cy };
+        const norm = normalizePosition(d.cx, d.cy, sp);
+        const region = sp === "wedge2" ? norm.region : undefined;
+        return { ...d, r, cx: norm.cx, cy: norm.cy, region };
       }),
     })),
 
@@ -254,18 +287,19 @@ export const useStore = create<State & Actions>((set, get) => ({
     const s = get();
     const step = Math.min(s.tutorialStep, CHAPTERS.length - 1);
     const scene = CHAPTERS[step]?.scene;
+    const space: Space = scene?.space ?? "torus";
     saveTutorialState(s.consent, "tutorial", step);
     set({
       tutorialMode: "tutorial",
       tutorialStep: step,
-      space: "torus",
+      space,
       selectedSimplex: null,
       cochainValues: new Map(),
       basisCursor: 0,
       cohomologyDegree: 0,
       showCupProduct: false,
       showArrows: false,
-      discs: scene ? discsFromScene(scene, "torus") : s.discs,
+      discs: scene ? discsFromScene(scene, space) : s.discs,
     });
   },
 
@@ -285,7 +319,9 @@ export const useStore = create<State & Actions>((set, get) => ({
     saveTutorialState(s.consent, "tutorial", newStep);
     const update: Partial<State> = { tutorialStep: newStep };
     if (newScene && newScene !== prevScene) {
-      update.discs = discsFromScene(newScene, "torus");
+      const newSpace: Space = newScene.space ?? "torus";
+      update.space = newSpace;
+      update.discs = discsFromScene(newScene, newSpace);
       update.selectedSimplex = null;
       update.cochainValues = new Map();
       update.basisCursor = 0;
@@ -302,7 +338,9 @@ export const useStore = create<State & Actions>((set, get) => ({
     saveTutorialState(s.consent, "tutorial", newStep);
     const update: Partial<State> = { tutorialStep: newStep };
     if (newScene && newScene !== prevScene) {
-      update.discs = discsFromScene(newScene, "torus");
+      const newSpace: Space = newScene.space ?? "torus";
+      update.space = newSpace;
+      update.discs = discsFromScene(newScene, newSpace);
       update.selectedSimplex = null;
       update.cochainValues = new Map();
       update.basisCursor = 0;
@@ -315,10 +353,12 @@ export const useStore = create<State & Actions>((set, get) => ({
     const step = Math.min(Math.max(0, n), CHAPTERS.length - 1);
     if (step === s.tutorialStep) return;
     const scene = CHAPTERS[step]?.scene;
+    const newSpace: Space = scene?.space ?? s.space;
     saveTutorialState(s.consent, "tutorial", step);
     set({
       tutorialStep: step,
-      discs: scene ? discsFromScene(scene, "torus") : s.discs,
+      space: newSpace,
+      discs: scene ? discsFromScene(scene, newSpace) : s.discs,
       selectedSimplex: null,
       cochainValues: new Map(),
       basisCursor: 0,
@@ -341,4 +381,11 @@ export const useStore = create<State & Actions>((set, get) => ({
   },
 
   setGlossaryOpen: (v) => set({ glossaryOpen: v }),
+
+  setRing: (spec) =>
+    set({
+      ring: spec,
+      cochainValues: new Map(),
+      basisCursor: 0,
+    }),
 }));
