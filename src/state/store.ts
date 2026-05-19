@@ -4,6 +4,7 @@ import { simplexKey } from "./types";
 import type { RingElement, RingSpec } from "../math/ring";
 import { makeRing } from "../math/ring";
 import { TORUS_PERIOD, normalizePosition } from "../math/intersection";
+import { alignDiscsToGoodCover } from "../math/align";
 import {
   loadFromStorage,
   saveConsent,
@@ -75,6 +76,7 @@ type State = {
   cupPickedIndex: number;
   cupBasisOnLeft: boolean;
   showCupProduct: boolean;
+  showEmptyCoverHighlight: boolean;
   tutorialMode: TutorialMode;
   tutorialStep: number;
   consent: Consent;
@@ -88,6 +90,7 @@ type Actions = {
   resizeDisc: (id: string, r: number) => void;
   removeDisc: (id: string) => void;
   clearDiscs: () => void;
+  alignDiscs: () => void;
   loadDiscs: (
     discs: Array<{ cx: number; cy: number; r: number; color?: string }>,
     space?: Space,
@@ -109,6 +112,7 @@ type Actions = {
   setCupPickedIndex: (i: number) => void;
   setCupBasisOnLeft: (v: boolean) => void;
   setShowCupProduct: (v: boolean) => void;
+  setShowEmptyCoverHighlight: (v: boolean) => void;
   enterTutorial: () => void;
   exitTutorial: () => void;
   nextStep: () => void;
@@ -154,6 +158,7 @@ export const useStore = create<State & Actions>((set, get) => ({
   cupPickedIndex: 0,
   cupBasisOnLeft: true,
   showCupProduct: false,
+  showEmptyCoverHighlight: false,
   tutorialMode: initialTutorialMode,
   tutorialStep: initialTutorialStep,
   consent: persisted.consent,
@@ -197,6 +202,8 @@ export const useStore = create<State & Actions>((set, get) => ({
     })),
   clearDiscs: () =>
     set({ discs: [], selectedSimplex: null, cochainValues: new Map() }),
+  alignDiscs: () =>
+    set((s) => ({ discs: alignDiscsToGoodCover(s.discs, s.space) })),
   loadDiscs: (discs, space) =>
     set((s) => {
       const sp = space ?? s.space;
@@ -269,6 +276,7 @@ export const useStore = create<State & Actions>((set, get) => ({
   setCupPickedIndex: (i) => set({ cupPickedIndex: i }),
   setCupBasisOnLeft: (v) => set({ cupBasisOnLeft: v }),
   setShowCupProduct: (v) => set({ showCupProduct: v }),
+  setShowEmptyCoverHighlight: (v) => set({ showEmptyCoverHighlight: v }),
   setSpace: (sp) =>
     set((state) => ({
       space: sp,

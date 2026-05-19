@@ -62,6 +62,16 @@ export function tripleIntersects(a: Disc, b: Disc, c: Disc): boolean {
 
 export const TORUS_PERIOD = 12;
 
+const componentDeckElementsCache = new Map<Space, ReturnType<typeof deckElements>>();
+
+function componentDeckElements(space: Space): ReturnType<typeof deckElements> {
+  const cached = componentDeckElementsCache.get(space);
+  if (cached !== undefined) return cached;
+  const elements = deckElements(space);
+  componentDeckElementsCache.set(space, elements);
+  return elements;
+}
+
 // Helly's theorem in R²: a finite family of convex sets has a common point iff
 // every triple does. For discs (convex), this exactly characterizes non-empty
 // k-fold intersection from the existing 2- and 3-disc tests.
@@ -101,7 +111,7 @@ function deckComponentCount(space: Space, discs: Disc[]): number {
   for (let i = 1; i < discs.length; i++) {
     if (discs[i].r < discs[anchorIdx].r) anchorIdx = i;
   }
-  const elements = deckElements(space);
+  const elements = componentDeckElements(space);
   const others: Disc[] = [];
   for (let i = 0; i < discs.length; i++) if (i !== anchorIdx) others.push(discs[i]);
   const pieces: Disc[][] = [];
@@ -148,29 +158,116 @@ export function tripleComponentCount(space: Space, a: Disc, b: Disc, c: Disc): n
   return deckComponentCount(space, [a, b, c]);
 }
 
+function addEvent(events: number[], x: number, minX: number, maxX: number): void {
+  if (x < minX - EPS || x > maxX + EPS) return;
+  events.push(Math.max(minX, Math.min(maxX, x)));
+}
+
+function circleCircleIntersectionXs(events: number[], a: Disc, b: Disc, minX: number, maxX: number): void {
+  const dx = b.cx - a.cx;
+  const dy = b.cy - a.cy;
+  const d2 = dx * dx + dy * dy;
+  if (d2 < EPS * EPS) return;
+  const d = Math.sqrt(d2);
+  if (d > a.r + b.r + EPS) return;
+  if (d < Math.abs(a.r - b.r) - EPS) return;
+  const along = (d2 + a.r * a.r - b.r * b.r) / (2 * d);
+  const h2 = a.r * a.r - along * along;
+  if (h2 < -EPS) return;
+  const h = Math.sqrt(Math.max(0, h2));
+  const ux = dx / d;
+  const uy = dy / d;
+  const px = a.cx + along * ux;
+  addEvent(events, px - uy * h, minX, maxX);
+  addEvent(events, px + uy * h, minX, maxX);
+}
+
+function circleHorizontalEdgeIntersectionXs(
+  events: number[],
+  d: Disc,
+  y: number,
+  minX: number,
+  maxX: number,
+): void {
+  const dy = y - d.cy;
+  const h2 = d.r * d.r - dy * dy;
+  if (h2 < -EPS) return;
+  const h = Math.sqrt(Math.max(0, h2));
+  addEvent(events, d.cx - h, minX, maxX);
+  addEvent(events, d.cx + h, minX, maxX);
+}
+
+function verticalLineCoveredByDiscs(discs: Disc[], x: number, minY: number, maxY: number): boolean {
+  const intervals: Array<[number, number]> = [];
+  for (const d of discs) {
+    const dx = x - d.cx;
+    const h2 = d.r * d.r - dx * dx;
+    if (h2 < -EPS) continue;
+    const h = Math.sqrt(Math.max(0, h2));
+    const lo = Math.max(minY, d.cy - h);
+    const hi = Math.min(maxY, d.cy + h);
+    if (hi >= minY - EPS && lo <= maxY + EPS) intervals.push([lo, hi]);
+  }
+  if (intervals.length === 0) return false;
+  intervals.sort((a, b) => a[0] - b[0] || b[1] - a[1]);
+  let coveredTo = minY;
+  for (const [lo, hi] of intervals) {
+    if (lo > coveredTo + EPS) return false;
+    if (hi > coveredTo) coveredTo = hi;
+    if (coveredTo >= maxY - EPS) return true;
+  }
+  return coveredTo >= maxY - EPS;
+}
+
+function exactRectCoveredByDiscs(discs: Disc[], minX: number, maxX: number, minY: number, maxY: number): boolean {
+  if (discs.length === 0) return false;
+  const relevant = discs.filter(
+    (d) => d.cx + d.r >= minX - EPS && d.cx - d.r <= maxX + EPS &&
+      d.cy + d.r >= minY - EPS && d.cy - d.r <= maxY + EPS,
+  );
+  if (relevant.length === 0) return false;
+  const events: number[] = [minX, maxX];
+  for (const d of relevant) {
+    addEvent(events, d.cx - d.r, minX, maxX);
+    addEvent(events, d.cx + d.r, minX, maxX);
+    circleHorizontalEdgeIntersectionXs(events, d, minY, minX, maxX);
+    circleHorizontalEdgeIntersectionXs(events, d, maxY, minX, maxX);
+  }
+  for (let i = 0; i < relevant.length; i++) {
+    for (let j = i + 1; j < relevant.length; j++) {
+      circleCircleIntersectionXs(events, relevant[i], relevant[j], minX, maxX);
+    }
+  }
+  events.sort((a, b) => a - b);
+  const xs: number[] = [];
+  for (const x of events) {
+    if (xs.length === 0 || Math.abs(x - xs[xs.length - 1]) > 1e-7) xs.push(x);
+  }
+  for (const x of xs) {
+    if (!verticalLineCoveredByDiscs(relevant, x, minY, maxY)) return false;
+  }
+  for (let i = 0; i + 1 < xs.length; i++) {
+    const a = xs[i];
+    const b = xs[i + 1];
+    if (b - a <= 1e-7) continue;
+    if (!verticalLineCoveredByDiscs(relevant, (a + b) / 2, minY, maxY)) return false;
+  }
+  return true;
+}
+
 export function coverComplete(discs: Disc[], space: Space): boolean {
   if (space === "planar") return true;
   if (space === "wedge2") return coverCompleteWedge2(discs);
   if (discs.length === 0) return false;
   const P = TORUS_PERIOD;
   const HALF = P / 2;
-  const N = 40;
-  const step = P / N;
-  for (let i = 0; i < N; i++) {
-    const x = -HALF + (i + 0.5) * step;
-    for (let j = 0; j < N; j++) {
-      const y = -HALF + (j + 0.5) * step;
-      let covered = false;
-      for (const d of discs) {
-        for (const dt of spaceTranslates(d, space)) {
-          if (pointInDisc(x, y, dt)) { covered = true; break; }
-        }
-        if (covered) break;
-      }
-      if (!covered) return false;
-    }
-  }
-  return true;
+  return exactRectCoveredByDiscs(
+    discs.flatMap((d) => spaceTranslates(d, space)),
+    -HALF,
+    HALF,
+    -HALF,
+    HALF,
+  );
 }
 
 function planarQuadNonEmpty(a: Disc, b: Disc, c: Disc, d: Disc): boolean {

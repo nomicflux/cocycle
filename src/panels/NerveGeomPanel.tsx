@@ -138,6 +138,21 @@ function ValueBadge({ x, y, value }: { x: number; y: number; value: number }) {
   );
 }
 
+function ShadowBadge({ x, y, text }: { x: number; y: number; text: string }) {
+  const w = Math.max(28, 10 + text.length * 7);
+  return (
+    <g pointerEvents="none">
+      <rect x={x - w / 2} y={y - 9} width={w} height={18} rx={4}
+        fill="#f1f5f9" stroke="#94a3b8" strokeWidth={1} strokeDasharray="3 2" />
+      <text x={x} y={y} textAnchor="middle" dy="0.32em"
+        fontSize="11" fontFamily="ui-monospace, monospace" fill="#475569"
+        fontStyle="italic">
+        {text}
+      </text>
+    </g>
+  );
+}
+
 function DDZeroBadge({ x, y }: { x: number; y: number }) {
   return (
     <g pointerEvents="none">
@@ -174,7 +189,6 @@ export default function NerveGeomPanel() {
   const nerve = useNerve();
   const selectedSimplex = useStore((s) => s.selectedSimplex);
   const selectSimplex = useStore((s) => s.selectSimplex);
-  const k = useStore((s) => s.cohomologyDegree);
   const cochainValues = useStore((s) => s.cochainValues);
   const showLabels = useStore((s) => s.showLabels);
   const showArrows = useStore((s) => s.showArrows);
@@ -189,13 +203,16 @@ export default function NerveGeomPanel() {
   const ring = useRing();
   const n = nerve.byDim[0]?.length ?? 0;
   const positions = Array.from({ length: n }, (_, i) => vertexPos(i, n));
-  const delta = applyCoboundary(cochainValues, nerve, k, ring);
-  const hasNontrivialDelta = delta.size > 0;
+  const deltaByK = [0, 1, 2].map((kk) =>
+    applyCoboundary(cochainValues, nerve, kk, ring),
+  );
 
   const toggle = (s: Simplex) => selectSimplex(same(selectedSimplex, s) ? null : s);
-  const failing = (s: Simplex): boolean => delta.has(simplexKey(s));
+  const failingAt = (kk: number, s: Simplex): boolean =>
+    (deltaByK[kk] ?? new Map()).has(simplexKey(s));
   const cVal = (s: Simplex): RingElement => cochainValues.get(simplexKey(s)) ?? ring.zero;
-  const dVal = (s: Simplex): RingElement => delta.get(simplexKey(s)) ?? ring.zero;
+  const dValAt = (kk: number, s: Simplex): RingElement =>
+    (deltaByK[kk] ?? new Map()).get(simplexKey(s)) ?? ring.zero;
   const cupVal = (s: Simplex): RingElement =>
     cupPreview?.result.values.get(simplexKey(s)) ?? ring.zero;
 
@@ -239,7 +256,7 @@ export default function NerveGeomPanel() {
         {(nerve.byDim[2] ?? []).map((t) => {
           const pts = t.map((i) => positions[i]);
           const ptsStr = pts.map((p) => `${p[0]},${p[1]}`).join(" ");
-          const p = trianglePresentation(same(selectedSimplex, t), k === 1 && failing(t));
+          const p = trianglePresentation(same(selectedSimplex, t), failingAt(1, t));
           return (
             <polygon
               key={simplexKey(t)} points={ptsStr}
@@ -253,7 +270,7 @@ export default function NerveGeomPanel() {
 
         {(nerve.byDim[1] ?? []).map((e) => {
           const [a, b] = e.map((i) => positions[i]);
-          const p = edgePresentation(same(selectedSimplex, e), k === 0 && failing(e));
+          const p = edgePresentation(same(selectedSimplex, e), failingAt(0, e));
           return (
             <line
               key={simplexKey(e)}
@@ -268,8 +285,7 @@ export default function NerveGeomPanel() {
         {positions.map((p, i) => {
           const sigma = [i];
           const sel = same(selectedSimplex, sigma);
-          const fail = k === 0 && failing(sigma);
-          const fill = sel ? "#eab308" : fail ? "#dc2626" : "#1e293b";
+          const fill = sel ? "#eab308" : "#1e293b";
           return (
             <g key={i} onClick={() => toggle(sigma)} style={{ cursor: "pointer" }}
               onMouseEnter={() => hoverIn(sigma)} onMouseLeave={hoverOut}>
@@ -284,7 +300,7 @@ export default function NerveGeomPanel() {
 
         {(nerve.byDim[3] ?? []).map((t) => {
           const [tx, ty] = centroid(t.map((i) => positions[i]));
-          const p = tetraPresentation(same(selectedSimplex, t), k === 2 && failing(t));
+          const p = tetraPresentation(same(selectedSimplex, t), failingAt(2, t));
           return (
             <g key={simplexKey(t)} onClick={() => toggle(t)} style={{ cursor: "pointer" }}
               onMouseEnter={() => hoverIn(t)} onMouseLeave={hoverOut}>
@@ -313,49 +329,49 @@ export default function NerveGeomPanel() {
           );
         })}
 
-        {showLabels && k === 0 && (nerve.byDim[0] ?? []).map((s) => {
+        {showLabels && (nerve.byDim[0] ?? []).map((s) => {
           const v = cVal(s);
           if (ring.isZero(v)) return null;
           const [px, py] = positions[s[0]];
           return <ValueBadge key={`v-${simplexKey(s)}`} x={px + 30} y={py - 16} value={zToInt(v)} />;
         })}
-        {showLabels && k === 1 && (nerve.byDim[1] ?? []).map((e) => {
+        {showLabels && (nerve.byDim[1] ?? []).map((e) => {
           const v = cVal(e);
           if (ring.isZero(v)) return null;
           const [mx, my] = midpoint(positions[e[0]], positions[e[1]]);
           return <ValueBadge key={`v-${simplexKey(e)}`} x={mx} y={my - 20} value={zToInt(v)} />;
         })}
-        {showLabels && k === 2 && (nerve.byDim[2] ?? []).map((t) => {
+        {showLabels && (nerve.byDim[2] ?? []).map((t) => {
           const v = cVal(t);
           if (ring.isZero(v)) return null;
           const [cx, cy] = centroid(t.map((i) => positions[i]));
           return <ValueBadge key={`v-${simplexKey(t)}`} x={cx} y={cy - 30} value={zToInt(v)} />;
         })}
 
-        {showLabels && k === 0 && (nerve.byDim[1] ?? []).map((e) => {
-          const v = dVal(e);
+        {showLabels && (nerve.byDim[1] ?? []).map((e) => {
+          const v = dValAt(0, e);
           if (ring.isZero(v)) return null;
           const [mx, my] = midpoint(positions[e[0]], positions[e[1]]);
-          return <ValueBadge key={`d-${simplexKey(e)}`} x={mx} y={my - 20} value={zToInt(v)} />;
+          return <ShadowBadge key={`d-${simplexKey(e)}`} x={mx} y={my + 20} text={`δ ${ring.format(v)}`} />;
         })}
-        {showLabels && k === 1 && (nerve.byDim[2] ?? []).map((t) => {
-          const v = dVal(t);
+        {showLabels && (nerve.byDim[2] ?? []).map((t) => {
+          const v = dValAt(1, t);
           if (ring.isZero(v)) return null;
           const [cx, cy] = centroid(t.map((i) => positions[i]));
-          return <ValueBadge key={`d-${simplexKey(t)}`} x={cx} y={cy - 30} value={zToInt(v)} />;
+          return <ShadowBadge key={`d-${simplexKey(t)}`} x={cx} y={cy + 30} text={`δ ${ring.format(v)}`} />;
         })}
-        {showLabels && k === 2 && (nerve.byDim[3] ?? []).map((t) => {
-          const v = dVal(t);
+        {showLabels && (nerve.byDim[3] ?? []).map((t) => {
+          const v = dValAt(2, t);
           if (ring.isZero(v)) return null;
           const [tx, ty] = centroid(t.map((i) => positions[i]));
-          return <ValueBadge key={`d-${simplexKey(t)}`} x={tx + 60} y={ty} value={zToInt(v)} />;
+          return <ShadowBadge key={`d-${simplexKey(t)}`} x={tx + 60} y={ty} text={`δ ${ring.format(v)}`} />;
         })}
 
-        {showLabels && hasNontrivialDelta && k === 0 && (nerve.byDim[2] ?? []).map((t) => {
+        {showLabels && deltaByK[0].size > 0 && (nerve.byDim[2] ?? []).map((t) => {
           const [cx, cy] = centroid(t.map((i) => positions[i]));
           return <DDZeroBadge key={`dd-${simplexKey(t)}`} x={cx} y={cy} />;
         })}
-        {showLabels && hasNontrivialDelta && k === 1 && (nerve.byDim[3] ?? []).map((t) => {
+        {showLabels && deltaByK[1].size > 0 && (nerve.byDim[3] ?? []).map((t) => {
           const [tx, ty] = centroid(t.map((i) => positions[i]));
           return <DDZeroBadge key={`dd-${simplexKey(t)}`} x={tx + 60} y={ty + 20} />;
         })}

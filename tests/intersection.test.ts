@@ -1,9 +1,19 @@
 import { describe, it, expect } from "vitest";
 import type { Disc } from "../src/state/types";
-import { pairIntersects, tripleIntersects, pointInDisc } from "../src/math/intersection";
+import { coverComplete, pairIntersects, tripleIntersects, pointInDisc } from "../src/math/intersection";
 import { buildNerve } from "../src/math/nerve";
 
 const D = (cx: number, cy: number, r: number): Disc => ({ id: `${cx},${cy},${r}`, cx, cy, r, color: "#000" });
+
+function torusGridCover(r: number): Disc[] {
+  const discs: Disc[] = [];
+  for (const cx of [-4, 0, 4]) {
+    for (const cy of [-4, 0, 4]) {
+      discs.push(D(cx, cy, r));
+    }
+  }
+  return discs;
+}
 
 describe("pairIntersects", () => {
   it("returns true for overlapping discs", () => {
@@ -48,6 +58,16 @@ describe("pointInDisc", () => {
     expect(pointInDisc(1, 0, D(0, 0, 1))).toBe(true);
     expect(pointInDisc(1.001, 0, D(0, 0, 1))).toBe(false);
     expect(pointInDisc(0, 0, D(0, 0, 1))).toBe(true);
+  });
+});
+
+describe("coverComplete", () => {
+  it("rejects torus covers with holes between grid-sample points", () => {
+    expect(coverComplete(torusGridCover(2.78), "torus")).toBe(false);
+  });
+
+  it("accepts torus covers at the exact 3x3 square-cell covering threshold", () => {
+    expect(coverComplete(torusGridCover(Math.sqrt(8) + 1e-4), "torus")).toBe(true);
   });
 });
 

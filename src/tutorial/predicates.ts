@@ -51,10 +51,8 @@ export const sawDelta: Predicate = ({
 export const hasH1Cocycle: Predicate = ({
   nerve,
   cochainValues,
-  cohomologyDegree,
   ring,
 }) => {
-  if (cohomologyDegree !== 1) return false;
   let nonzero = false;
   for (const [key, v] of cochainValues) {
     if (!ring.isZero(v) && keyDim(key) === 1) {
@@ -69,12 +67,8 @@ export const hasH1Cocycle: Predicate = ({
 export const hasNonCocycle: Predicate = ({
   nerve,
   cochainValues,
-  cohomologyDegree,
   ring,
-}) => {
-  if (cohomologyDegree < 1) return false;
-  return applyCoboundary(cochainValues, nerve, cohomologyDegree, ring).size > 0;
-};
+}) => applyCoboundary(cochainValues, nerve, 1, ring).size > 0;
 
 export const onH1Tab: Predicate = ({ cohomologyDegree }) =>
   cohomologyDegree === 1;

@@ -13,9 +13,23 @@ import { useCoverStatus, useUnlocked } from "./state/derived";
 
 function CoverStatusChip() {
   const status = useCoverStatus();
+  const showEmptyCoverHighlight = useStore((s) => s.showEmptyCoverHighlight);
+  const setShowEmptyCoverHighlight = useStore(
+    (s) => s.setShowEmptyCoverHighlight,
+  );
   if (status.state === "empty") return null;
   if (status.state === "incomplete") {
-    return <span className="cover-chip cover-chip--incomplete">cover incomplete</span>;
+    return (
+      <button
+        type="button"
+        className={`cover-chip cover-chip--incomplete${showEmptyCoverHighlight ? " cover-chip--active" : ""}`}
+        aria-pressed={showEmptyCoverHighlight}
+        title="Toggle highlighting for uncovered sample cells in the drawing panel."
+        onClick={() => setShowEmptyCoverHighlight(!showEmptyCoverHighlight)}
+      >
+        cover incomplete
+      </button>
+    );
   }
   if (status.state === "good") {
     return <span className="cover-chip cover-chip--good">good cover ✓</span>;
@@ -34,6 +48,7 @@ function CoverStatusChip() {
 
 export default function App() {
   const clear = useStore((s) => s.clearDiscs);
+  const align = useStore((s) => s.alignDiscs);
   const addDisc = useStore((s) => s.addDisc);
   const showCupProduct = useStore((s) => s.showCupProduct);
   const setShowCupProduct = useStore((s) => s.setShowCupProduct);
@@ -44,12 +59,15 @@ export default function App() {
 
   const panels = [
     unlocked.has("drawing") && <DrawingPanel key="drawing" />,
-    (unlocked.has("nerve-geom") || unlocked.has("nerve-set")) && <NervePanel key="nerve" />,
+    (unlocked.has("nerve-geom") || unlocked.has("nerve-set")) && (
+      <NervePanel key="nerve" />
+    ),
     unlocked.has("cohomology") && <CohomologyPanel key="cohomology" />,
   ].filter(Boolean);
-  const gridClass = unlocked.has("cohomology") && panels.length >= 2
-    ? "grid grid--chain"
-    : `grid grid--cols-${panels.length}`;
+  const gridClass =
+    unlocked.has("cohomology") && panels.length >= 2
+      ? "grid grid--chain"
+      : `grid grid--cols-${panels.length}`;
 
   return (
     <div className="app">
@@ -57,8 +75,22 @@ export default function App() {
         <h1>Cocycle</h1>
         <span className="subtitle">Čech cohomology over ℤ, up to H²</span>
         {unlocked.has("presets") && <PresetsMenu />}
-        <button onClick={() => addDisc(Math.random() * 2 - 1, Math.random() * 2 - 1, 1.2)}>+ Disc</button>
+        <button
+          onClick={() =>
+            addDisc(Math.random() * 2 - 1, Math.random() * 2 - 1, 1.2)
+          }
+        >
+          + Disc
+        </button>
         <button onClick={clear}>Clear all</button>
+        {unlocked.has("align") && (
+          <button
+            onClick={align}
+            title="Move discs into something more closely resembling a goodcover."
+          >
+            Adjust Cover
+          </button>
+        )}
         {unlocked.has("cover-status") && <CoverStatusChip />}
         {unlocked.has("cup-product") && (
           <label className="topbar-toggle">

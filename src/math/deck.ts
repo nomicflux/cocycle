@@ -39,7 +39,15 @@ export function deckInverse(g: DeckElem): DeckElem {
 }
 
 export function deckApplyDisc(g: DeckElem, d: Disc): Disc {
-  return { ...d, cx: g.sx * d.cx + g.tx, cy: g.sy * d.cy + g.ty };
+  const out: Disc = {
+    id: d.id,
+    cx: g.sx * d.cx + g.tx,
+    cy: g.sy * d.cy + g.ty,
+    r: d.r,
+    color: d.color,
+  };
+  if (d.region !== undefined) out.region = d.region;
+  return out;
 }
 
 export function deckEq(a: DeckElem, b: DeckElem): boolean {

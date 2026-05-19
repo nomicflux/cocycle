@@ -540,9 +540,17 @@ body {
   font-size: 12px; padding: 3px 8px;
   border-radius: 10px; border: 1px solid transparent;
   white-space: nowrap;
+  font: inherit;
 }
 .cover-chip--incomplete {
   color: #64748b; background: #f1f5f9; border-color: #e2e8f0;
+  cursor: pointer;
+}
+.cover-chip--incomplete:hover {
+  color: #334155; background: #e2e8f0; border-color: #cbd5e1;
+}
+.cover-chip--active {
+  color: #92400e; background: #fef3c7; border-color: #f59e0b;
 }
 .cover-chip--good {
   color: #166534; background: #dcfce7; border-color: #86efac;
@@ -552,3 +560,7 @@ body {
   cursor: help;
 }
 
+.empty-cover-highlight {
+  fill: #ff0000;
+  fill-opacity: 0.55;
+}

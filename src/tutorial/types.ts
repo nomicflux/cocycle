@@ -19,6 +19,7 @@ export type Feature =
   | "presets"
   | "snapshots"
   | "cover-status"
+  | "align"
   | "ring-picker";
 
 export const ALL_FEATURES: Feature[] = [
@@ -36,6 +37,7 @@ export const ALL_FEATURES: Feature[] = [
   "presets",
   "snapshots",
   "cover-status",
+  "align",
   "ring-picker",
 ];
 

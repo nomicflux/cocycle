@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import type { Disc, Simplex, Space } from "../state/types";
 import { simplexKey } from "../state/types";
 import { useStore } from "../state/store";
@@ -51,6 +51,7 @@ const CUP_COLOR = "#7c3aed";
 const SVG_SIZE = 600;
 const MATH_MIN = -6;
 const MATH_MAX = 6;
+const EMPTY_COVER_MASK_ID = "empty-cover-mask";
 
 function darken(hex: string): string {
   const r = parseInt(hex.slice(1, 3), 16);
@@ -200,6 +201,18 @@ function ghostsFor(d: Disc, space: Space): Array<{ cx: number; cy: number }> {
     .map((t) => ({ cx: t.cx, cy: t.cy }));
 }
 
+function emptyCoverMaskDiscs(discs: Disc[], space: Space): Disc[] {
+  if (space === "planar" || discs.length === 0) return [];
+  if (space === "wedge2") return [];
+  return discs
+    .flatMap((d) => spaceTranslates(d, space))
+    .filter(
+      (d) =>
+        d.cx + d.r >= MATH_MIN && d.cx - d.r <= MATH_MAX &&
+        d.cy + d.r >= MATH_MIN && d.cy - d.r <= MATH_MAX,
+    );
+}
+
 export default function DrawingPanel() {
   const discs = useStore((s) => s.discs);
   const moveDisc = useStore((s) => s.moveDisc);
@@ -212,6 +225,7 @@ export default function DrawingPanel() {
   const space = useStore((s) => s.space);
   const setSpace = useStore((s) => s.setSpace);
   const showCupProduct = useStore((s) => s.showCupProduct);
+  const showEmptyCoverHighlight = useStore((s) => s.showEmptyCoverHighlight);
   const cohomologyDegree = useStore((s) => s.cohomologyDegree);
   const cochainValues = useStore((s) => s.cochainValues);
   const nerve = useNerve();
@@ -220,6 +234,10 @@ export default function DrawingPanel() {
   const cupPreview = useCupResult();
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
+  const emptyMaskDiscs = useMemo(
+    () => showEmptyCoverHighlight ? emptyCoverMaskDiscs(discs, space) : [],
+    [discs, space, showEmptyCoverHighlight],
+  );
 
   const onDiscPointerDown = (e: React.PointerEvent, d: Disc, idx: number) => {
     e.stopPropagation();
@@ -299,6 +317,27 @@ export default function DrawingPanel() {
               <path d="M0,0 L10,5 L0,10 z" fill={c} />
             </marker>
           ))}
+          {emptyMaskDiscs.length > 0 && (
+            <mask
+              id={EMPTY_COVER_MASK_ID}
+              x={0}
+              y={0}
+              width={SVG_SIZE}
+              height={SVG_SIZE}
+              maskUnits="userSpaceOnUse"
+            >
+              <rect width={SVG_SIZE} height={SVG_SIZE} fill="#fff" />
+              {emptyMaskDiscs.map((d, i) => (
+                <circle
+                  key={`empty-mask-${i}`}
+                  cx={toSvgX(d.cx)}
+                  cy={toSvgY(d.cy)}
+                  r={toSvgScale(d.r)}
+                  fill="#000"
+                />
+              ))}
+            </mask>
+          )}
         </defs>
         <rect width={SVG_SIZE} height={SVG_SIZE} fill="#fafafa" />
         {hasQuotient && space !== "wedge2" && (
@@ -331,6 +370,15 @@ export default function DrawingPanel() {
               fontSize="10" fontFamily="ui-sans-serif, system-ui"
               fill="#64748b" stroke="#fff" strokeWidth={2} paintOrder="stroke">basepoint</text>
           </g>
+        )}
+        {emptyMaskDiscs.length > 0 && (
+          <rect
+            className="empty-cover-highlight"
+            width={SVG_SIZE}
+            height={SVG_SIZE}
+            mask={`url(#${EMPTY_COVER_MASK_ID})`}
+            pointerEvents="none"
+          />
         )}
         {renderOrder.map((i) => {
           const d = discs[i];
