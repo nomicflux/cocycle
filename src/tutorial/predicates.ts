@@ -92,9 +92,13 @@ function cupOfH1Classes(ctx: PredCtx): Cochain | null {
   return cup(cupA, cupB, nerve, ring);
 }
 
-export const usedCupProduct: Predicate = (ctx) => {
-  const res = cupOfH1Classes(ctx);
-  return res !== null && !isCoboundary(res.values, ctx.nerve, 2, ctx.ring);
+// The cup-product chapter's worked example: cup two 1-cochains A, B and get a
+// nonzero 1⌣1 product. (No H²-class reasoning — the example lives on a single
+// contractible triangle where H² = 0.)
+export const usedCupProduct: Predicate = ({ cupA, cupB, nerve, ring }) => {
+  if (!cupA || !cupB) return false;
+  if (cupA.degree !== 1 || cupB.degree !== 1) return false;
+  return cochainIsNonzero(cup(cupA, cupB, nerve, ring), ring);
 };
 
 const INITIAL_TORUS_H1: Array<[number, number]> = [

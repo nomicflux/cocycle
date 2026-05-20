@@ -51,6 +51,17 @@ export const SCENE_CIRCLE_TRIANGLE: SceneSpec = {
   ],
 };
 
+// Three discs sharing one common triple region: the nerve is exactly the
+// single filled triangle {0,1,2} (3 vertices, edges {0,1} {0,2} {1,2}, one
+// 2-simplex). Used as the concrete worked example for the cup product.
+export const SCENE_CUP_TRIANGLE: SceneSpec = {
+  discs: [
+    { cx: 0, cy: 1.732, r: 2.2, color: "#fecaca" },
+    { cx: 1.5, cy: -0.866, r: 2.2, color: "#bbf7d0" },
+    { cx: -1.5, cy: -0.866, r: 2.2, color: "#bfdbfe" },
+  ],
+};
+
 export const SCENE_TORUS_H1: SceneSpec = {
   space: "torus",
   discs: [
