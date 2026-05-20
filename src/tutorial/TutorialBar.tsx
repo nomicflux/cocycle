@@ -2,24 +2,11 @@ import { useRef, useState, type ReactNode, type PointerEvent as RPointerEvent } 
 import { useStore } from "../state/store";
 import { useGoalReached } from "../state/derived";
 import { CHAPTERS } from "./chapters";
+import { renderInline } from "./renderInline";
 
 const DEFAULT_HEIGHT = 200;
 const MIN_HEIGHT = 72;
 const MAX_HEIGHT_FRAC = 0.7;
-
-function renderInline(text: string): ReactNode[] {
-  const re = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  const parts = text.split(re);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
-      return <em key={i}>{part.slice(1, -1)}</em>;
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
 
 function renderProse(text: string): ReactNode {
   return text.split("\n\n").map((para, i) => (

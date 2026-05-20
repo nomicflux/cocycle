@@ -1,21 +1,7 @@
-import type { ReactNode } from "react";
 import { useStore } from "../state/store";
 import { CHAPTERS } from "./chapters";
 import { GLOSSARY, type GlossaryEntry } from "./glossary";
-
-function renderInline(text: string): ReactNode[] {
-  const re = /(\*\*[^*]+\*\*|\*[^*]+\*)/g;
-  const parts = text.split(re);
-  return parts.map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) {
-      return <em key={i}>{part.slice(1, -1)}</em>;
-    }
-    return <span key={i}>{part}</span>;
-  });
-}
+import { renderInline } from "./renderInline";
 
 function GlossaryItem({ entry }: { entry: GlossaryEntry }) {
   return (

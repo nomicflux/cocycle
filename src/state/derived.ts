@@ -71,43 +71,17 @@ export type CupPreview = {
   rightDegree: number;
 };
 
-export function useBasisCochain(): Cochain | null {
-  const pickedDegree = useStore((s) => s.cupPickedDegree);
-  const pickedIndex = useStore((s) => s.cupPickedIndex);
-  const basisH = useCohomology(pickedDegree);
-  return useMemo(() => {
-    const gens = basisH.cocycleBasis.filter((c) => !c.isCoboundary);
-    if (gens.length === 0) return null;
-    const idx = Math.min(pickedIndex, gens.length - 1);
-    return gens[idx].cochain;
-  }, [basisH, pickedIndex]);
-}
-
 export function useCupResult(): CupPreview | null {
   const nerve = useNerve();
   const ring = useRing();
-  const q = useStore((s) => s.cohomologyDegree);
-  const currentValues = useStore((s) => s.cochainValues);
-  const pickedDegree = useStore((s) => s.cupPickedDegree);
-  const pickedIndex = useStore((s) => s.cupPickedIndex);
-  const basisOnLeft = useStore((s) => s.cupBasisOnLeft);
-  const basisH = useCohomology(pickedDegree);
+  const a = useStore((s) => s.cupA);
+  const b = useStore((s) => s.cupB);
   return useMemo(() => {
-    if (pickedDegree + q > 2) return null;
-    const gens = basisH.cocycleBasis.filter((c) => !c.isCoboundary);
-    if (gens.length === 0) return null;
-    const idx = Math.min(pickedIndex, gens.length - 1);
-    const basis = gens[idx];
-    const current: Cochain = { degree: q, values: currentValues };
-    const result = basisOnLeft
-      ? cup(basis.cochain, current, nerve, ring)
-      : cup(current, basis.cochain, nerve, ring);
-    return {
-      result,
-      leftDegree: basisOnLeft ? pickedDegree : q,
-      rightDegree: basisOnLeft ? q : pickedDegree,
-    };
-  }, [nerve, ring, q, currentValues, pickedDegree, pickedIndex, basisOnLeft, basisH]);
+    if (!a || !b) return null;
+    if (a.degree + b.degree > 2) return null;
+    const result = cup(a, b, nerve, ring);
+    return { result, leftDegree: a.degree, rightDegree: b.degree };
+  }, [nerve, ring, a, b]);
 }
 
 export function useDeltaShadow(k: number): Map<SimplexKey, RingElement> {
@@ -183,8 +157,8 @@ export function useGoalReached(): boolean {
   const basisCursor = useStore((s) => s.basisCursor);
   const showArrows = useStore((s) => s.showArrows);
   const showCupProduct = useStore((s) => s.showCupProduct);
-  const cupPickedIndex = useStore((s) => s.cupPickedIndex);
-  const cupPickedDegree = useStore((s) => s.cupPickedDegree);
+  const cupA = useStore((s) => s.cupA);
+  const cupB = useStore((s) => s.cupB);
   const space = useStore((s) => s.space);
   const nerve = useNerve();
   const ring = useRing();
@@ -201,14 +175,14 @@ export function useGoalReached(): boolean {
       basisCursor,
       showArrows,
       showCupProduct,
-      cupPickedIndex,
-      cupPickedDegree,
+      cupA,
+      cupB,
       space,
       ring,
     });
   }, [
     mode, step, discs, nerve, cochainValues, cohomologyDegree,
-    selectedSimplex, basisCursor, showArrows, showCupProduct, cupPickedIndex,
-    cupPickedDegree, space, ring,
+    selectedSimplex, basisCursor, showArrows, showCupProduct, cupA,
+    cupB, space, ring,
   ]);
 }

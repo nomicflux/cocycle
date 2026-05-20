@@ -1,5 +1,6 @@
-import type { Predicate } from "./types";
+import type { Predicate, PredCtx } from "./types";
 import type { Cochain, Disc, SimplexKey } from "../state/types";
+import type { Ring } from "../math/ring";
 import { classCoordinates, cohomology, isCoboundary } from "../math/cohomology";
 import { cup } from "../math/cup";
 import { applyCoboundary } from "../state/derived";
@@ -76,8 +77,25 @@ export const onH1Tab: Predicate = ({ cohomologyDegree }) =>
 export const visitedSecondBasis: Predicate = ({ basisCursor }) =>
   basisCursor >= 1;
 
-export const usedCupProduct: Predicate = ({ showCupProduct, cohomologyDegree }) =>
-  showCupProduct && cohomologyDegree === 1;
+const cochainIsNonzero = (c: Cochain, ring: Ring): boolean =>
+  [...c.values.values()].some((v) => !ring.isZero(v));
+
+// Cup A ⌣ B when both stored factors are nonzero degree-1 cocycles
+// (i.e. genuine H¹ classes); null when they are not a valid H¹⌣H¹ pair.
+function cupOfH1Classes(ctx: PredCtx): Cochain | null {
+  const { cupA, cupB, nerve, ring } = ctx;
+  if (!cupA || !cupB) return null;
+  if (cupA.degree !== 1 || cupB.degree !== 1) return null;
+  if (!cochainIsNonzero(cupA, ring) || !cochainIsNonzero(cupB, ring)) return null;
+  if (applyCoboundary(cupA.values, nerve, 1, ring).size > 0) return null;
+  if (applyCoboundary(cupB.values, nerve, 1, ring).size > 0) return null;
+  return cup(cupA, cupB, nerve, ring);
+}
+
+export const usedCupProduct: Predicate = (ctx) => {
+  const res = cupOfH1Classes(ctx);
+  return res !== null && !isCoboundary(res.values, ctx.nerve, 2, ctx.ring);
+};
 
 const INITIAL_TORUS_H1: Array<[number, number]> = [
   [-4, -4], [0, -4], [4, -4],
@@ -107,7 +125,7 @@ function torusCoverChangeCount(discs: Disc[]): number {
 }
 
 export const equivalentTorusCover: Predicate = ({ discs, nerve, ring }) => {
-  if (torusCoverChangeCount(discs) < 3) return false;
+  if (torusCoverChangeCount(discs) < 1) return false;
   const h0 = cohomology(nerve, 0, ring);
   const h1 = cohomology(nerve, 1, ring);
   const h2 = cohomology(nerve, 2, ring);
@@ -135,66 +153,21 @@ export const isGoodCover: Predicate = ({ discs }) => {
   return true;
 };
 
-export const sawCupVanishOnWedge: Predicate = ({
-  space,
-  nerve,
-  cochainValues,
-  cohomologyDegree,
-  showCupProduct,
-  cupPickedDegree,
-  cupPickedIndex,
-  ring,
-}) => {
-  if (space !== "wedge2") return false;
-  if (!showCupProduct) return false;
-  if (cohomologyDegree !== 1 || cupPickedDegree !== 1) return false;
-  let nonzero = false;
-  for (const [key, v] of cochainValues) {
-    if (!ring.isZero(v) && keyDim(key) === 1) { nonzero = true; break; }
-  }
-  if (!nonzero) return false;
-  if (applyCoboundary(cochainValues, nerve, 1, ring).size > 0) return false;
-  const h1 = cohomology(nerve, 1, ring);
-  const gens = h1.cocycleBasis.filter((c) => !c.isCoboundary);
-  if (gens.length === 0) return false;
-  const idx = Math.min(Math.max(0, cupPickedIndex), gens.length - 1);
-  const basis = gens[idx].cochain;
-  const current: Cochain = { degree: 1, values: cochainValues };
-  const result = cup(current, basis, nerve, ring);
-  return isCoboundary(result.values, nerve, 2, ring);
+export const sawCupVanishOnWedge: Predicate = (ctx) => {
+  if (ctx.space !== "wedge2") return false;
+  const res = cupOfH1Classes(ctx);
+  return res !== null && isCoboundary(res.values, ctx.nerve, 2, ctx.ring);
 };
 
 export const ringIsZ2: Predicate = ({ ring }) =>
   ring.spec.kind === "Zp" && ring.spec.p === 2;
 
-export const sawCupSquareOnRP2: Predicate = ({
-  space,
-  nerve,
-  cochainValues,
-  cohomologyDegree,
-  showCupProduct,
-  cupPickedDegree,
-  cupPickedIndex,
-  ring,
-}) => {
+export const sawCupSquareOnRP2: Predicate = (ctx) => {
+  const { space, ring } = ctx;
   if (space !== "projective") return false;
   if (ring.spec.kind !== "Zp" || ring.spec.p !== 2) return false;
-  if (!showCupProduct) return false;
-  if (cohomologyDegree !== 1 || cupPickedDegree !== 1) return false;
-  if (applyCoboundary(cochainValues, nerve, 1, ring).size > 0) return false;
-  let nonzero = false;
-  for (const [key, v] of cochainValues) {
-    if (!ring.isZero(v) && keyDim(key) === 1) { nonzero = true; break; }
-  }
-  if (!nonzero) return false;
-  const h1 = cohomology(nerve, 1, ring);
-  const gens = h1.cocycleBasis.filter((c) => !c.isCoboundary);
-  if (gens.length === 0) return false;
-  const idx = Math.min(Math.max(0, cupPickedIndex), gens.length - 1);
-  const basis = gens[idx].cochain;
-  const current: Cochain = { degree: 1, values: cochainValues };
-  const result = cup(current, basis, nerve, ring);
-  return !isCoboundary(result.values, nerve, 2, ring);
+  const res = cupOfH1Classes(ctx);
+  return res !== null && !isCoboundary(res.values, ctx.nerve, 2, ring);
 };
 
 export const addedDifferentCoboundary: Predicate = ({ nerve, cochainValues, ring }) => {

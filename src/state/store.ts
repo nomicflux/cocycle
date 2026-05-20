@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Disc, Simplex, SimplexKey, Space } from "./types";
+import type { Cochain, Disc, Simplex, SimplexKey, Space } from "./types";
 import { simplexKey } from "./types";
 import type { RingElement, RingSpec } from "../math/ring";
 import { makeRing } from "../math/ring";
@@ -35,6 +35,17 @@ const clampR = (r: number, space: Space): number =>
   space === "planar" ? r : Math.min(r, MAX_R_QUOTIENT);
 
 const keyDim = (k: SimplexKey): number => k.split(",").length - 1;
+
+function currentCochain(
+  cochainValues: Map<SimplexKey, RingElement>,
+  degree: CohomologyDegree,
+): Cochain {
+  const values = new Map<SimplexKey, RingElement>();
+  for (const [k, v] of cochainValues) {
+    if (keyDim(k) === degree) values.set(k, v);
+  }
+  return { degree, values };
+}
 
 function discsFromScene(scene: SceneSpec, space: Space): Disc[] {
   return scene.discs.map((d) => {
@@ -72,9 +83,8 @@ type State = {
   showLabels: boolean;
   showArrows: boolean;
   space: Space;
-  cupPickedDegree: CohomologyDegree;
-  cupPickedIndex: number;
-  cupBasisOnLeft: boolean;
+  cupA: Cochain | null;
+  cupB: Cochain | null;
   showCupProduct: boolean;
   showEmptyCoverHighlight: boolean;
   tutorialMode: TutorialMode;
@@ -108,9 +118,9 @@ type Actions = {
   setShowLabels: (v: boolean) => void;
   setShowArrows: (v: boolean) => void;
   setSpace: (s: Space) => void;
-  setCupPickedDegree: (d: CohomologyDegree) => void;
-  setCupPickedIndex: (i: number) => void;
-  setCupBasisOnLeft: (v: boolean) => void;
+  setCupA: () => void;
+  setCupB: () => void;
+  clearCupFactors: () => void;
   setShowCupProduct: (v: boolean) => void;
   setShowEmptyCoverHighlight: (v: boolean) => void;
   enterTutorial: () => void;
@@ -154,9 +164,8 @@ export const useStore = create<State & Actions>((set, get) => ({
   showLabels: true,
   showArrows: initialTutorialMode === "tutorial" ? false : true,
   space: initialSpace,
-  cupPickedDegree: 0,
-  cupPickedIndex: 0,
-  cupBasisOnLeft: true,
+  cupA: null,
+  cupB: null,
   showCupProduct: false,
   showEmptyCoverHighlight: false,
   tutorialMode: initialTutorialMode,
@@ -199,9 +208,11 @@ export const useStore = create<State & Actions>((set, get) => ({
       discs: s.discs.filter((d) => d.id !== id),
       selectedSimplex: null,
       cochainValues: new Map(),
+      cupA: null,
+      cupB: null,
     })),
   clearDiscs: () =>
-    set({ discs: [], selectedSimplex: null, cochainValues: new Map() }),
+    set({ discs: [], selectedSimplex: null, cochainValues: new Map(), cupA: null, cupB: null }),
   alignDiscs: () =>
     set((s) => ({ discs: alignDiscsToGoodCover(s.discs, s.space) })),
   loadDiscs: (discs, space) =>
@@ -223,6 +234,8 @@ export const useStore = create<State & Actions>((set, get) => ({
         selectedSimplex: null,
         cochainValues: new Map(),
         basisCursor: 0,
+        cupA: null,
+        cupB: null,
       };
     }),
 
@@ -272,9 +285,11 @@ export const useStore = create<State & Actions>((set, get) => ({
   setBasisCursor: (i) => set({ basisCursor: i }),
   setShowLabels: (v) => set({ showLabels: v }),
   setShowArrows: (v) => set({ showArrows: v }),
-  setCupPickedDegree: (d) => set({ cupPickedDegree: d, cupPickedIndex: 0 }),
-  setCupPickedIndex: (i) => set({ cupPickedIndex: i }),
-  setCupBasisOnLeft: (v) => set({ cupBasisOnLeft: v }),
+  setCupA: () =>
+    set((s) => ({ cupA: currentCochain(s.cochainValues, s.cohomologyDegree) })),
+  setCupB: () =>
+    set((s) => ({ cupB: currentCochain(s.cochainValues, s.cohomologyDegree) })),
+  clearCupFactors: () => set({ cupA: null, cupB: null }),
   setShowCupProduct: (v) => set({ showCupProduct: v }),
   setShowEmptyCoverHighlight: (v) => set({ showEmptyCoverHighlight: v }),
   setSpace: (sp) =>
@@ -283,6 +298,8 @@ export const useStore = create<State & Actions>((set, get) => ({
       selectedSimplex: null,
       cochainValues: new Map(),
       basisCursor: 0,
+      cupA: null,
+      cupB: null,
       discs: state.discs.map((d) => {
         const r = clampR(d.r, sp);
         const norm = normalizePosition(d.cx, d.cy, sp);
@@ -307,6 +324,8 @@ export const useStore = create<State & Actions>((set, get) => ({
       cohomologyDegree: 0,
       showCupProduct: false,
       showArrows: false,
+      cupA: null,
+      cupB: null,
       discs: scene ? discsFromScene(scene, space) : s.discs,
     });
   },
@@ -333,6 +352,8 @@ export const useStore = create<State & Actions>((set, get) => ({
       update.selectedSimplex = null;
       update.cochainValues = new Map();
       update.basisCursor = 0;
+      update.cupA = null;
+      update.cupB = null;
     }
     set(update);
   },
@@ -352,6 +373,8 @@ export const useStore = create<State & Actions>((set, get) => ({
       update.selectedSimplex = null;
       update.cochainValues = new Map();
       update.basisCursor = 0;
+      update.cupA = null;
+      update.cupB = null;
     }
     set(update);
   },
@@ -370,6 +393,8 @@ export const useStore = create<State & Actions>((set, get) => ({
       selectedSimplex: null,
       cochainValues: new Map(),
       basisCursor: 0,
+      cupA: null,
+      cupB: null,
     });
   },
 
@@ -395,5 +420,7 @@ export const useStore = create<State & Actions>((set, get) => ({
       ring: spec,
       cochainValues: new Map(),
       basisCursor: 0,
+      cupA: null,
+      cupB: null,
     }),
 }));

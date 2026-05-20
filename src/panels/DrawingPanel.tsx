@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react";
 import type { Disc, Simplex, Space } from "../state/types";
 import { simplexKey } from "../state/types";
 import { useStore } from "../state/store";
-import { useNerve, useBasisCochain, useCupResult, useRing } from "../state/derived";
+import { useNerve, useCupResult, useRing } from "../state/derived";
 import type { Ring, RingElement } from "../math/ring";
 import { signedFormat, zToInt } from "../math/ring";
 import { intersectionCentroid, intersectionComponents } from "../util/intersectionRegion";
@@ -45,7 +45,6 @@ function polygonLatticeRenders(
 }
 
 const CUR_COLOR = "#0891b2";
-const BASIS_COLOR = "#fb7185";
 const CUP_COLOR = "#7c3aed";
 
 const SVG_SIZE = 600;
@@ -230,7 +229,6 @@ export default function DrawingPanel() {
   const cochainValues = useStore((s) => s.cochainValues);
   const nerve = useNerve();
   const ring = useRing();
-  const basisCochain = useBasisCochain();
   const cupPreview = useCupResult();
   const svgRef = useRef<SVGSVGElement>(null);
   const [drag, setDrag] = useState<DragState | null>(null);
@@ -310,7 +308,7 @@ export default function DrawingPanel() {
         preserveAspectRatio="xMidYMid meet"
       >
         <defs>
-          {[CUR_COLOR, BASIS_COLOR, CUP_COLOR].map((c) => (
+          {[CUR_COLOR, CUP_COLOR].map((c) => (
             <marker key={c} id={`cup-arrow-${c.replace("#", "")}`}
               viewBox="0 0 10 10" refX="9" refY="5"
               markerWidth="6" markerHeight="6" orient="auto">
@@ -485,17 +483,6 @@ export default function DrawingPanel() {
             values={cochainValues}
             degree={cohomologyDegree}
             color={CUR_COLOR} layer={0}
-            ring={ring}
-            toSvgX={toSvgX} toSvgY={toSvgY}
-          />
-        )}
-        {showCupProduct && basisCochain && cupPreview && (
-          <CochainOverlay
-            discs={discs}
-            simplices={nerve.byDim[basisCochain.degree] ?? []}
-            values={basisCochain.values}
-            degree={basisCochain.degree}
-            color={BASIS_COLOR} layer={1}
             ring={ring}
             toSvgX={toSvgX} toSvgY={toSvgY}
           />

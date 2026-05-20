@@ -1,4 +1,4 @@
-import type { Disc, DiscRegion, Nerve, Simplex, SimplexKey, Space } from "../state/types";
+import type { Cochain, Disc, DiscRegion, Nerve, Simplex, SimplexKey, Space } from "../state/types";
 import type { Ring, RingElement } from "../math/ring";
 
 export type TutorialMode = "free" | "tutorial";
@@ -61,8 +61,8 @@ export type PredCtx = {
   basisCursor: number;
   showArrows: boolean;
   showCupProduct: boolean;
-  cupPickedIndex: number;
-  cupPickedDegree: 0 | 1 | 2;
+  cupA: Cochain | null;
+  cupB: Cochain | null;
   space: Space;
   ring: Ring;
 };

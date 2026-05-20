@@ -226,15 +226,15 @@ export const GLOSSARY: GlossaryEntry[] = [
     term: "cup product",
     symbol: "∪",
     introducedIn: "cup-product",
-    short: "Multiplication on cohomology: Hᵖ ⊗ Hᵍ → Hᵖ⁺ᵍ.",
+    short: "Multiplication on cohomology: H^{p} ⊗ H^{q} → H^{p+q}.",
     long:
-      "(α ∪ β)(σ) = α(front face of σ) · β(back face of σ), where σ is a (p+q)-simplex split at the pivot vertex vₚ. Descends to a well-defined product on cohomology classes thanks to a Leibniz rule for δ. The algebraic shadow of geometric intersection.",
+      "(α ∪ β)(σ) = α(front face of σ) · β(back face of σ), where σ is a (p+q)-simplex split at the pivot vertex v_{p}. Descends to a well-defined product on cohomology classes thanks to a Leibniz rule for δ. The algebraic shadow of geometric intersection.",
   },
   {
     term: "front face / back face",
     introducedIn: "cup-product",
     short: "How the cup product slices a simplex at the 'pivot' vertex.",
     long:
-      "For a (p+q)-simplex σ = {v₀, …, vₚ₊ᵧ}, the front face is {v₀, …, vₚ} and the back face is {vₚ, …, vₚ₊ᵧ}. They share the pivot vertex vₚ. Cup product takes the value of α on the front and β on the back and multiplies them.",
+      "For a (p+q)-simplex σ = {v₀, …, v_{p+q}}, the front face is {v₀, …, v_{p}} and the back face is {v_{p}, …, v_{p+q}}. They share the pivot vertex v_{p}. Cup product takes the value of α on the front and β on the back and multiplies them.",
   },
 ];

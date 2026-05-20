@@ -11,7 +11,7 @@ import {
   useRing,
   applyCoboundary,
 } from "../state/derived";
-import type { Simplex, SimplexKey } from "../state/types";
+import type { Cochain, Simplex, SimplexKey } from "../state/types";
 import { simplexKey } from "../state/types";
 import { faces } from "../math/coboundary";
 import type { Ring, RingElement, RingSpec } from "../math/ring";
@@ -486,68 +486,55 @@ function LayerCard({ k }: { k: CohomologyDegree }) {
   );
 }
 
+function FactorView({ label, cochain, ring }: { label: string; cochain: Cochain | null; ring: Ring }) {
+  if (!cochain) {
+    return <div className="cup-factor"><strong>{label}</strong>: <span className="hint">unset</span></div>;
+  }
+  const entries = [...cochain.values.entries()].filter(([, v]) => !ring.isZero(v));
+  return (
+    <div className="cup-factor">
+      <strong>{label}</strong> (C{sup(cochain.degree)}):{" "}
+      {entries.length === 0
+        ? <span className="hint">0</span>
+        : entries.map(([k, v]) => (
+            <code key={k} className="cup-factor-entry">{`{${k}}`}={ring.format(v)} </code>
+          ))}
+    </div>
+  );
+}
+
 function CupProductSection() {
   const nerve = useNerve();
   const ring = useRing();
-  const q = useStore((s) => s.cohomologyDegree);
-  const pickedDegree = useStore((s) => s.cupPickedDegree);
-  const pickedIndex = useStore((s) => s.cupPickedIndex);
-  const basisOnLeft = useStore((s) => s.cupBasisOnLeft);
-  const setPickedDegree = useStore((s) => s.setCupPickedDegree);
-  const setPickedIndex = useStore((s) => s.setCupPickedIndex);
-  const setBasisOnLeft = useStore((s) => s.setCupBasisOnLeft);
+  const cupA = useStore((s) => s.cupA);
+  const cupB = useStore((s) => s.cupB);
+  const setCupA = useStore((s) => s.setCupA);
+  const setCupB = useStore((s) => s.setCupB);
+  const clearCupFactors = useStore((s) => s.clearCupFactors);
 
-  const basisH = useCohomology(pickedDegree);
-  const generators = basisH.cocycleBasis.filter((c) => !c.isCoboundary);
-  const idx = Math.min(pickedIndex, Math.max(0, generators.length - 1));
-  const tooHigh = pickedDegree + q > 2;
   const preview = useCupResult();
+  const tooHigh = !!cupA && !!cupB && cupA.degree + cupB.degree > 2;
   const delta: Map<SimplexKey, RingElement> = preview
     ? applyCoboundary(preview.result.values, nerve, preview.result.degree, ring)
     : new Map();
 
   return (
     <section className="cup-section">
-      <h3>Cup product H<sup>p</sup> ⌣ H<sup>q</sup> → H<sup>p+q</sup></h3>
+      <h3>Cup product A ⌣ B</h3>
       <div className="cup-controls">
-        <label>
-          p:
-          <select
-            value={pickedDegree}
-            onChange={(e) => setPickedDegree(Number(e.target.value) as CohomologyDegree)}
-          >
-            <option value={0}>0</option>
-            <option value={1}>1</option>
-            <option value={2}>2</option>
-          </select>
-        </label>
-        <span className="cup-q">q = {q} (current focused degree)</span>
-        {generators.length > 0 && (
-          <label>
-            generator of H{sup(pickedDegree)}:
-            <select value={idx} onChange={(e) => setPickedIndex(Number(e.target.value))}>
-              {generators.map((_, i) => (
-                <option key={i} value={i}>g{i + 1}</option>
-              ))}
-            </select>
-          </label>
-        )}
-        <label>
-          <input type="radio" checked={basisOnLeft} onChange={() => setBasisOnLeft(true)} />
-          basis ⌣ current
-        </label>
-        <label>
-          <input type="radio" checked={!basisOnLeft} onChange={() => setBasisOnLeft(false)} />
-          current ⌣ basis
-        </label>
+        <button onClick={setCupA}>Set current as A</button>
+        <button onClick={setCupB}>Set current as B</button>
+        <button onClick={clearCupFactors}>Clear</button>
       </div>
-      {generators.length === 0 ? (
-        <div className="hint">no free generators in H{sup(pickedDegree)}</div>
-      ) : tooHigh ? (
-        <div className="hint">p + q = {pickedDegree + q} &gt; 2 — pick p ≤ {2 - q}</div>
+      <div className="cup-factors">
+        <FactorView label="A" cochain={cupA} ring={ring} />
+        <FactorView label="B" cochain={cupB} ring={ring} />
+      </div>
+      {tooHigh ? (
+        <div className="hint">deg A + deg B = {cupA!.degree + cupB!.degree} &gt; 2 — pick lower-degree factors</div>
       ) : preview ? (
         <div className="cup-result">
-          <div className="hint">result in C{sup(preview.result.degree)}:</div>
+          <div className="hint">A ⌣ B in C{sup(preview.result.degree)}:</div>
           {preview.result.values.size === 0 ? (
             <div className="hint">all zeros</div>
           ) : (
@@ -561,7 +548,9 @@ function CupProductSection() {
             δ(result) {delta.size === 0 ? "= 0  ✓ (cocycle)" : "≠ 0  ✗"}
           </span>
         </div>
-      ) : null}
+      ) : (
+        <div className="hint">set both A and B (build a cochain, then click “Set current as A” / “…as B”)</div>
+      )}
     </section>
   );
 }
